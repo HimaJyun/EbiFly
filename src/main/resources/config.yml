@@ -1,0 +1,17 @@
+# The default time-of-flight(minutes)(0=infinite)
+FlightTime: 10
+
+# Will inform the end time.(second)
+Notice:
+  Enable: true
+  Time: 30
+
+# http://dev.bukkit.org/bukkit-plugins/vault/
+Economy:
+  Enable: false
+  Refund: true
+# Cost per minute
+  Cost: 100
+  Tax:
+    Enable: false
+    Remittee: "Admin"

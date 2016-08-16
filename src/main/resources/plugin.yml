@@ -1,0 +1,34 @@
+main: jp.jyn.ebifly.EbiFly
+name: "${project.artifactId}"
+version: "${project.version}"
+website: https://jyn.jp/
+author: '@HimaJyun'
+softdepend: [Vault]
+
+commands:
+   fly:
+     description: 'Switching of flight'
+
+permissions:
+  ebifly.*:
+    children:
+      ebifly.fly: true
+      ebifly.worldchange: true
+      ebifly.other: true
+      ebifly.infinity: true
+      ebifly.free: true
+  ebifly.op:
+    children:
+      ebifly.other: true
+      ebifly.infinity: true
+      ebifly.free: true
+  ebifly.fly:
+    default: true
+  ebifly.worldchange:
+    default: true
+  ebifly.other:
+    default: op
+  ebifly.infinity:
+    default: op
+  ebifly.free:
+    default: op

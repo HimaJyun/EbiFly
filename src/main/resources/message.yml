@@ -1,0 +1,23 @@
+DontHavePermission: "&cYou don't have permission!!"
+InvalidValue: "&cPlease enter the correct value."
+
+Fly:
+  Disable: "&cfly mode disabled!!"
+  # [%time%] = Flight time.
+  Enable: "&afly mode enable!! ([%time%] minutes)"
+  Infinity: "infinity"
+  # [%time%] = time left.
+  Left: "&cFlight will end in the remaining [%time%] second."
+
+Not:
+  Found: "&cPlayer is not found!!"
+  # [%player%] = player name.
+  Online: "&c[%player%] is not online!!"
+  Survival: "&c[%player%] is not survival!!"
+
+Economy:
+  NotEnough: "&cMoney is not enough!!"
+  # [%price%] = flight cost.
+  Payment: "&apaid [%price%] in order to perform the flight!!"
+  # [%minutes%]and[%second%] = time left.
+  Refund: "&aWill repay the [%price%] because you still have [%minutes%] minute [%second%] second of time."
