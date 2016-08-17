@@ -51,7 +51,7 @@ public class EbiFly extends JavaPlugin {
 			}
 		}
 
-		// TODO:イベントリスナー登録
+		new EventListener(this);
 
 		// コマンドを登録
 		getCommand("fly").setExecutor(new Executer(this));
