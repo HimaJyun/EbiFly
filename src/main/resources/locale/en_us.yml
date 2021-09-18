@@ -1,0 +1,15 @@
+invalidNumber: "&cInvalid number&r: {value}"
+playerNotFound: "&cPlayer not found&r: {name}"
+
+flyEnable: "Flight is enabled! ({price} at {minute} minute)"
+flyPersist: "Persist flight is enable! ({price} per minute)"
+flyDisable: "Flight is disable!"
+
+paymentPersist: "You paid {price} for flight!"
+payemntOther: "You paid {price} for the flight of {player}!"
+paymentReceive: "{player} paid the flight fee {price} for {time} minutes!"
+refund: "Refunded {price} for unused flight!"
+refundOther: "{price} has been refunded because {player} has disabled the flight."
+
+# Don't touch
+version: 2
