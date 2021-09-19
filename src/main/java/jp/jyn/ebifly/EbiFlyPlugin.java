@@ -19,7 +19,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
-import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
@@ -49,7 +49,7 @@ public class EbiFlyPlugin extends JavaPlugin {
         }
 
         // バージョンチェッカー
-        BiConsumer<CommandSender, Boolean> checker;
+        Consumer<CommandSender> checker;
         if (config.versionCheck) {
             var v = new VersionChecker(this);
             checker = v::check;
@@ -57,7 +57,7 @@ public class EbiFlyPlugin extends JavaPlugin {
             // 定期確認
             var task = getServer().getScheduler().runTaskLaterAsynchronously(
                 this,
-                () -> v.check(Bukkit.getConsoleSender(), true),
+                () -> v.check(Bukkit.getConsoleSender()),
                 20 * 30
             );
             destructor.addFirst(task::cancel);
@@ -67,7 +67,7 @@ public class EbiFlyPlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(e, this);
             destructor.addFirst(() -> HandlerList.unregisterAll(e));
         } else {
-            checker = (ign, ore) -> {};
+            checker = ignore -> {};
         }
 
         // リポジトリ
@@ -79,7 +79,7 @@ public class EbiFlyPlugin extends JavaPlugin {
         // TODO: イベント
 
         // コマンド
-        var command = new FlyCommand(config, message, repository, economy);
+        var command = new FlyCommand(this, config, message, repository, economy, checker);
         var fly = Objects.requireNonNull(getServer().getPluginCommand("fly"));
         fly.setExecutor(command);
         fly.setTabCompleter(command);

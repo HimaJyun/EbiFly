@@ -3,7 +3,7 @@ name: "EbiFly"
 version: "${project.version}"
 website: "${project.url}"
 author: "HimaJyun( https://jyn.jp/ )"
-description: "Economy Billing Fly Plugin for Bukkit"
+description: "${project.description}"
 softdepend: [ "Vault" ]
 api-version: "1.17"
 

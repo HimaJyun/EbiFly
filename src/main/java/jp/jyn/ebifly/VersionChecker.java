@@ -32,13 +32,10 @@ class VersionChecker {
     }
 
     @PackagePrivate
-    void check(CommandSender recipient, boolean sendHeader) { // TODO: sendHeaderじゃなくて常時[EbiFly]で良いかも
+    void check(CommandSender recipient) {
         if ((System.currentTimeMillis() - lastChecked.get()) < CHECK_PERIOD) {
             var c = cache.get();
             if (c != null) {
-                if (sendHeader) {
-                    recipient.sendMessage(MessageConfig.HEADER);
-                }
                 recipient.sendMessage(c);
                 return;
             }
@@ -56,15 +53,11 @@ class VersionChecker {
             }
 
             var n = new String[]{
-                "New version available: %s -> %s".formatted(current, latest.version),
-                "Download: %s".formatted(latest.url)
+                "%sNew version available: %s -> %s".formatted(MessageConfig.PREFIX, current, latest.version),
+                "%sDownload: %s".formatted(MessageConfig.PREFIX, latest.url)
             };
             cache.set(n);
             lastChecked.set(System.currentTimeMillis());
-
-            if (sendHeader) {
-                recipient.sendMessage(MessageConfig.HEADER);
-            }
             recipient.sendMessage(n);
         });
     }
@@ -75,7 +68,7 @@ class VersionChecker {
         public void onPlayerJoin(PlayerJoinEvent e) {
             var p = e.getPlayer();
             if (p.hasPermission("ebifly.version")) {
-                VersionChecker.this.check(p, true);
+                VersionChecker.this.check(p);
             }
         }
     }

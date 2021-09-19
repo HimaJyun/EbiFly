@@ -1,5 +1,6 @@
-invalidNumber: "&c数値で指定してください&r: {value}"
+invalidNumber: "&c正の数で指定してください&r: {value}"
 playerNotFound: "&cプレイヤーがみつかりません&r: {name}"
+permissionError: "&cあなたにはコマンドを実行する権限がありません..."
 
 flyEnable: "飛行が有効になりました！ ({price}/{minute}分)"
 flyPersist: "持続的な飛行が有効になりました！ ({price}/分)"
@@ -10,6 +11,14 @@ payemntOther: "{player}を{time}分間飛行させるために{price}を支払�
 paymentReceive: "{player}が{time}分間の飛行料金{price}を払ってくれました！"
 refund: "未使用の飛行料金{price}を返金しました！"
 refundOther: "{player}が飛行を無効にしたため、{price}が返金されました。"
+
+help:
+  fly: "飛行の&a有効&r/&c無効&rを切り替えます。"
+  version: "バージョンを表示します。"
+  reload: "設定をリロードします。"
+  help: "このヘルプを表示します。"
+  time: "時間"
+  player: "プレイヤー"
 
 # ｻﾜﾙﾅｧ!!
 version: 2

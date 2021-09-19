@@ -4,6 +4,7 @@ import jp.jyn.ebifly.EbiFlyPlugin;
 import jp.jyn.jbukkitlib.config.YamlLoader;
 import jp.jyn.jbukkitlib.config.parser.component.ComponentParser;
 import org.bukkit.ChatColor;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.Plugin;
 
@@ -18,6 +19,9 @@ public class MessageConfig {
 
     public final ComponentParser invalidNumber;
     public final ComponentParser playerNotFound;
+    public final ComponentParser permissionError;
+
+    public final HelpMessage help;
 
     public MessageConfig(EbiFlyPlugin plugin, String locale) {
         this.locale = locale;
@@ -25,6 +29,9 @@ public class MessageConfig {
 
         invalidNumber = p(config.getString("invalidNumber"));
         playerNotFound = p(config.getString("playerNotFound"));
+        permissionError = p(config.getString("permissionError"));
+
+        help = new HelpMessage(Objects.requireNonNull(config.getConfigurationSection("help")));
     }
 
     private FileConfiguration loadConfig(Plugin plugin, String locale) {
@@ -42,5 +49,23 @@ public class MessageConfig {
 
     private static ComponentParser p(String value) {
         return ComponentParser.parse(PREFIX + value);
+    }
+
+    public final static class HelpMessage {
+        public final ComponentParser fly;
+        public final ComponentParser version;
+        public final ComponentParser reload;
+        public final ComponentParser help;
+
+        private HelpMessage(ConfigurationSection config) {
+            fly = p("/fly [%s] [%s] - %s".formatted(
+                config.getString("time", "time"),
+                config.getString("player", "player"),
+                config.getString("fly"))
+            );
+            version = p("/fly version - " + config.getString("version"));
+            reload = p("/fly reload - " + config.getString("reload"));
+            help = p("/fly help - " + config.getString("help"));
+        }
     }
 }

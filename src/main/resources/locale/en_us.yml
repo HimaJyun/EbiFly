@@ -1,5 +1,6 @@
 invalidNumber: "&cInvalid number&r: {value}"
 playerNotFound: "&cPlayer not found&r: {name}"
+permissionError: "&cYou don't have permission!"
 
 flyEnable: "Flight is enabled! ({price} at {minute} minute)"
 flyPersist: "Persist flight is enable! ({price} per minute)"
@@ -10,6 +11,14 @@ payemntOther: "You paid {price} for the flight of {player}!"
 paymentReceive: "{player} paid the flight fee {price} for {time} minutes!"
 refund: "Refunded {price} for unused flight!"
 refundOther: "{price} has been refunded because {player} has disabled the flight."
+
+help:
+  fly: "&aEnable&r/&cDisable&r fly."
+  version: "Show version."
+  reload: "Reload config."
+  help: "Show this help."
+  time: "time"
+  player: "player"
 
 # Don't touch
 version: 2

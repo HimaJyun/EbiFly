@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -46,8 +47,8 @@ public class FlyRepository implements EbiFly {
         }
 
         // 周期タイマーのはずなので特に気にせずクレジットを減らす
-        v.lastConsume().set(System.currentTimeMillis());
-        var cs = v.credit(); // TODO: このpollして処理して戻すって処理は定型なので共通化できるのでは？
+        v.lastConsume.set(System.currentTimeMillis());
+        var cs = v.credit; // TODO: このpollして処理して戻すって処理は定型なので共通化できるのでは？
         Credit credit;
         while ((credit = cs.pollFirst()) != null) {
             var i = credit.minute().decrementAndGet();
@@ -81,8 +82,9 @@ public class FlyRepository implements EbiFly {
 
         // お金ないならｵﾁﾛｰ!
         player.sendMessage("money not enough for persist");
-        flying.remove(player.getUniqueId()); // TODO: この処理切り出す方が良いかもね
+        v = flying.remove(player.getUniqueId()); // TODO: この処理切り出す方が良いかもね
         player.setAllowFlight(false);
+        v.timer.cancel(false);
         // TODO: タイマーキャンセル
     }
 
@@ -99,19 +101,19 @@ public class FlyRepository implements EbiFly {
         // 後の簡略化のためにクレジットを消費させる
         long time, use;
         while (true) { // TODO: これを関数で切り出す。-1ならクレジット切れ、+nなら未徴収分のミリ秒(それか時間そのもの？)。みたいな？
-            long old = v.lastConsume().get();
+            long old = v.lastConsume.get();
             time = System.currentTimeMillis() - old; // 経過時間
             use = TimeUnit.MILLISECONDS.toMinutes(time);
-            if (v.lastConsume().compareAndSet(old, old + TimeUnit.MINUTES.toMillis(use))) { // 消費した分だけ進めておく
+            if (v.lastConsume.compareAndSet(old, old + TimeUnit.MINUTES.toMillis(use))) { // 消費した分だけ進めておく
                 break;
             }
         }
         //TimeUnit.MILLISECONDS.toMinutes(time); TODO: TimeUnitを使う
-        useCredit(v.credit(), (int) use);
+        useCredit(v.credit, (int) use);
 
         // クレジット残数チェック
         int c = 0;
-        for (Credit credit : v.credit()) {
+        for (Credit credit : v.credit) {
             c += Math.max(credit.minute().get(), 0); // 念のためのマイナス避け
         }
 
@@ -119,18 +121,19 @@ public class FlyRepository implements EbiFly {
         if (c > 1) {
             // 警告タイマーの入れ直し
             // TODO: CASの段階でメモリに取っておく方が良いか？
-            long delay = TimeUnit.MINUTES.toMillis(c) + v.lastConsume().get(); // (残クレジット*60*1000)+最終徴収時刻 == 終了予定時刻
+            long delay = TimeUnit.MINUTES.toMillis(c) + v.lastConsume.get(); // (残クレジット*60*1000)+最終徴収時刻 == 終了予定時刻
             delay -= System.currentTimeMillis(); // 終了予定時刻 - 現時刻 == 終了予定までの時間
             delay -= this.notify;
-            executor.schedule(() -> stopTimer(player, this.notify > 0), delay, TimeUnit.MILLISECONDS);
+            v.setTimer(executor.schedule(() -> stopTimer(player, this.notify > 0), delay, TimeUnit.MILLISECONDS));
         } else if (notify) { // 停止タイマー入れ直す
             player.sendMessage("timeout warning");
-            executor.schedule(() -> stopTimer(player, false), this.notify, TimeUnit.MILLISECONDS); // TODO:
-            // ズレ補正のために再計算した方が良い？
+            v.setTimer(executor.schedule(() -> stopTimer(player, false), this.notify, TimeUnit.SECONDS));
+            // TODO: ズレ補正のために再計算した方が良い？
         } else { // 停止
             player.sendMessage("timeout stop");
             flying.remove(player.getUniqueId());
             player.setAllowFlight(false);
+            v.timer.cancel(false);
             // TODO: 止める
         }
     }
@@ -142,12 +145,19 @@ public class FlyRepository implements EbiFly {
 
     @Override
     public boolean persist(Player player) {
-        var v = flying.computeIfPresent(
-            player.getUniqueId(),
-            (u, s) -> new FlightStatus(s.lastConsume(), s.credit(), true)
-        );
+        var v = flying.get(player.getUniqueId());
 
-        return v != null && !v.credit().isEmpty();
+        // TODO: 書き直す
+        if (v != null && !v.credit.isEmpty()) {
+            if (v.timer != null) {
+                v.timer.cancel(false);
+            }
+            // TODO: 時間見直した方が良いかも？
+            v.timer = executor.scheduleAtFixedRate(() -> persistTimer(player), 1, 1, TimeUnit.MINUTES);
+            return true;
+        } else {
+            return false;
+        }
     }
 
     @Override
@@ -157,10 +167,14 @@ public class FlyRepository implements EbiFly {
         if (r) {
             v = flying.computeIfAbsent(player.getUniqueId(), u -> new FlightStatus());
         }
-        v.credit().addLast(new Credit(price, minute, payer));
-
-        // TODO: 停止タイマー
+        v.credit.addLast(new Credit(price, minute, payer));
         player.setAllowFlight(true);
+
+        // 停止タイマー入れ直し
+        v.reSchedule(
+            executor, () -> stopTimer(player, notify > 0),
+            TimeUnit.MINUTES.toSeconds(minute) - notify, TimeUnit.SECONDS
+        );
         return r;
     }
 
@@ -172,8 +186,8 @@ public class FlyRepository implements EbiFly {
             return -1;
         }
 
-        v.lastConsume().set(System.currentTimeMillis());
-        return useCredit(v.credit(), minute);
+        v.lastConsume.set(System.currentTimeMillis());
+        return useCredit(v.credit, minute);
     }
 
     @Override
@@ -184,12 +198,12 @@ public class FlyRepository implements EbiFly {
         }
         player.setAllowFlight(false);
 
-        long time = System.currentTimeMillis() - v.lastConsume().get(); // 経過時間
+        long time = System.currentTimeMillis() - v.lastConsume.get(); // 経過時間
         long min = TimeUnit.MILLISECONDS.toMinutes(time); // 消費クレジット
         long sec = time % (60 * 1000); // 消費秒(ミリ単位) TODO: これ、moduloを先にやってからなら減算1発で済むのでは？
 
         // クレジット消費
-        var d = v.credit();
+        var d = v.credit;
         useCredit(d, (int) min);
         if (d.isEmpty()) {
             return Collections.emptyMap();
@@ -253,10 +267,38 @@ public class FlyRepository implements EbiFly {
         return minute;
     }
 
-    private static final record FlightStatus(AtomicLong lastConsume, Deque<Credit> credit,
-                                             boolean persist) { // TODO: 止めた時用に稼働中タイマーを持つ必要がある
+    private static final class FlightStatus {
+        private final AtomicLong lastConsume;
+        private final Deque<Credit> credit;
+
+        private final Object lock = new Object();
+        private ScheduledFuture<?> timer = null;
+        private volatile boolean persist = false;
+
+        private FlightStatus(AtomicLong lastConsume, Deque<Credit> credit) {
+            this.lastConsume = lastConsume;
+            this.credit = credit;
+        }
+
         private FlightStatus() {
-            this(new AtomicLong(System.currentTimeMillis()), new ConcurrentLinkedDeque<>(), false);
+            this(new AtomicLong(System.currentTimeMillis()), new ConcurrentLinkedDeque<>());
+        }
+
+        private void setTimer(ScheduledFuture<?> timer) {
+            synchronized (lock) {
+                this.timer = timer;
+            }
+        }
+
+        private void reSchedule(ScheduledExecutorService executor, Runnable runnable, long delay, TimeUnit unit) {
+            synchronized (lock) {
+                if (timer != null && !timer.isDone()) {
+                    delay = unit.toNanos(delay) + Math.max(timer.getDelay(TimeUnit.NANOSECONDS), 0);
+                    unit = TimeUnit.NANOSECONDS;
+                    timer.cancel(false);
+                }
+                timer = executor.schedule(runnable, delay, unit);
+            }
         }
     }
 
