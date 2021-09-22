@@ -2,13 +2,19 @@ invalidNumber: "&c正の数で指定してください&r: {value}"
 playerNotFound: "&cプレイヤーがみつかりません&r: {name}"
 permissionError: "&cあなたにはコマンドを実行する権限がありません..."
 
-flyEnable: "飛行が有効になりました！ ({price}/{minute}分)"
-flyPersist: "持続的な飛行が有効になりました！ ({price}/分)"
-flyDisable: "飛行が無効になりました！"
+fly:
+  enable: "飛行が&a有効&rになりました！"
+  disable: "飛行が&c無効&rになりました！"
+  timeout: "&cあと&r{time}秒&cで飛行時間が終了します！"
+
+payment:
+  refund: "未使用の飛行料金{price}を返金しました！"
+  insufficient: "お金が足りません！"
 
 paymentPersist: "飛行のために{price}を支払いました！"
 payemntOther: "{player}を{time}分間飛行させるために{price}を支払いました！"
 paymentReceive: "{player}が{time}分間の飛行料金{price}を払ってくれました！"
+paymentInsufficient: "お金が足りません！"
 refund: "未使用の飛行料金{price}を返金しました！"
 refundOther: "{player}が飛行を無効にしたため、{price}が返金されました。"
 
