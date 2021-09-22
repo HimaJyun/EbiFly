@@ -21,16 +21,9 @@ public class MessageConfig {
     public final ComponentParser playerNotFound;
     public final ComponentParser permissionError;
 
-    public final ComponentParser flyDisable;
-    //public final Consumer<Player> flyDisable;
-    //public final Consumer<Player> flyTimeout;
-
-    public final ComponentParser paymentInsufficient;
-    public final ComponentParser paymentRefund;
-
     public final HelpMessage help;
 
-    public MessageConfig(EbiFlyPlugin plugin, String locale, MainConfig main) {
+    public MessageConfig(EbiFlyPlugin plugin, String locale) {
         this.locale = locale;
         var config = loadConfig(plugin, locale);
 
@@ -38,46 +31,8 @@ public class MessageConfig {
         playerNotFound = p(config.getString("playerNotFound"));
         permissionError = p(config.getString("permissionError"));
 
-        flyDisable = m(main.noticeDisable, config.getString("fly.disable"));
-        paymentRefund = m(main.noticePayment, config.getString("payment.refund"));
-
-        /*flyDisable = n(main.noticeDisable.message, config.getString("fly.disable"));
-        flyTimeout = nc(main.noticeTimeout.message, config.getString("fly.timeout"),
-            ComponentVariable.init().put("time", main.noticeTimeoutSecond));*/
-
-        paymentInsufficient = p(config.getString("payment.insufficient"));
-
         help = new HelpMessage(Objects.requireNonNull(config.getConfigurationSection("help")));
     }
-
-    private static ComponentParser p(String value) {
-        return ComponentParser.parse(PREFIX + value);
-    }
-
-    public static ComponentParser m(MainConfig.NoticeConfig config, String value) {
-        return switch (config.message) {
-            case ACTION_BAR -> p(value);
-            case CHAT -> ComponentParser.parse(value);
-            case FALSE -> null;
-        };
-    }
-
-    /*private static Consumer<Player> n(MainConfig.NoticeConfig.MessagePosition position, String value) {
-        return switch (position) {
-            case FALSE -> p -> {};
-            case CHAT -> p(value).apply()::send;
-            case ACTION_BAR -> ComponentParser.parse(value).apply()::actionbar;
-        };
-    }
-
-    private static Consumer<Player> nc(MainConfig.NoticeConfig.MessagePosition position, String value,
-                                       ComponentVariable variable) {
-        return switch (position) {
-            case FALSE -> p -> {};
-            case CHAT -> p(value).apply(variable)::send;
-            case ACTION_BAR -> p(value).apply(variable)::actionbar;
-        };
-    }*/
 
     private FileConfiguration loadConfig(Plugin plugin, String locale) {
         var f = "locale/" + locale + ".yml";
@@ -90,6 +45,10 @@ public class MessageConfig {
             l.warning("Please check " + f + ". If you need downgrade, use backup.");
         }
         return c;
+    }
+
+    private static ComponentParser p(String value) {
+        return ComponentParser.parse(PREFIX + value);
     }
 
     public final static class HelpMessage {

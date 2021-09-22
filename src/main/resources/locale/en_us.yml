@@ -2,8 +2,9 @@ invalidNumber: "&cInvalid number&r: {value}"
 playerNotFound: "&cPlayer not found&r: {name}"
 permissionError: "&cYou don't have permission!"
 
-flyEnable: "Flight is &aenabled&r!"
-flyDisable: "Flight is &cdisable&r!"
+flyEnable: "Flight is enabled! ({price} at {minute} minute)"
+flyPersist: "Persist flight is enable! ({price} per minute)"
+flyDisable: "Flight is disable!"
 
 paymentPersist: "You paid {price} for flight!"
 payemntOther: "You paid {price} for the flight of {player}!"

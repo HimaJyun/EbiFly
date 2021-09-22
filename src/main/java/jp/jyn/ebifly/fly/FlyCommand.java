@@ -5,7 +5,6 @@ import jp.jyn.ebifly.EbiFlyPlugin;
 import jp.jyn.ebifly.config.MainConfig;
 import jp.jyn.ebifly.config.MessageConfig;
 import jp.jyn.jbukkitlib.config.locale.BukkitLocale;
-import jp.jyn.jbukkitlib.config.parser.component.ComponentParser;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -18,10 +17,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 public class FlyCommand implements TabExecutor {
     private final EbiFlyPlugin plugin;
@@ -34,8 +31,6 @@ public class FlyCommand implements TabExecutor {
 
     private final PluginDescriptionFile description;
 
-    private final Consumer<Player> noticeDisableWithRefund;
-
     public FlyCommand(EbiFlyPlugin plugin, MainConfig config, BukkitLocale<MessageConfig> message,
                       EbiFly fly, VaultEconomy economy,
                       Consumer<CommandSender> checker) {
@@ -47,61 +42,6 @@ public class FlyCommand implements TabExecutor {
         this.economy = economy;
         this.description = plugin.getDescription();
         this.checker = checker;
-
-        noticeDisableWithRefund = mixer(config.noticeDisable, p -> this.message.get(p).flyDisable,
-            config.noticePayment, p -> this.message.get(p).paymentRefund, true);
-    }
-
-    private Consumer<Player> mixer(MainConfig.NoticeConfig config1, Function<Player, ComponentParser> selector1,
-                                   MainConfig.NoticeConfig config2, Function<Player, ComponentParser> selector2,
-                                   boolean use2) {
-        Consumer<Player> result, tmp = null;
-        result = switch (config1.message) {
-            case ACTION_BAR -> p -> selector1.apply(p).apply().actionbar(p);
-            case CHAT -> p -> selector1.apply(p).apply().send(p);
-            case FALSE -> null;
-        };
-        if (use2) {
-            tmp = switch (config2.message) {
-                case ACTION_BAR -> p -> selector2.apply(p).apply().actionbar(p);
-                case CHAT -> p -> selector2.apply(p).apply().send(p);
-                case FALSE -> null;
-            };
-        }
-
-        if (result == null) {
-            result = tmp;
-        } else if (config1.message != MainConfig.NoticeConfig.MessagePosition.ACTION_BAR
-            || config2.message != MainConfig.NoticeConfig.MessagePosition.ACTION_BAR) {
-            if (tmp != null) {
-                result = result.andThen(tmp); // どちらかがアクションバーでないなら上書きのリスクはないので1の後に2を出す
-            }
-            // tmp == null -> 何もしない
-        } // else // 両方がactionbarなら何もしない == 1を優先
-
-        tmp = null;
-        if (config1.particle != null) {
-            tmp = p -> p.getWorld().spawnParticle(config1.particle, p.getEyeLocation(), config1.particleCount,
-                config1.particleOffsetX, config1.particleOffsetY, config1.particleOffsetZ);
-        } else if (use2 && config2.particle != null) {
-            tmp = p -> p.getWorld().spawnParticle(config2.particle, p.getEyeLocation(), config2.particleCount,
-                config2.particleOffsetX, config2.particleOffsetY, config2.particleOffsetZ);
-        }
-        if (tmp != null) {
-            result = result == null ? tmp : result.andThen(tmp);
-        }
-
-        tmp = null;
-        if (config1.sound != null) {
-            tmp = p -> p.getWorld().playSound(p.getLocation(), config1.sound, config1.soundVolume, config1.soundPitch);
-        } else if (use2 && config2.sound != null) {
-            tmp = p -> p.getWorld().playSound(p.getLocation(), config2.sound, config2.soundVolume, config2.soundPitch);
-        }
-        if (tmp != null) {
-            result = result == null ? tmp : result.andThen(tmp);
-        }
-
-        return result == null ? p -> {} : result;
     }
 
     @Override
@@ -169,12 +109,13 @@ public class FlyCommand implements TabExecutor {
 
     private void stop(Player player) {
         var refund = fly.stop(player);
-
         switch (config.economy.refund) {
             case FALSE:
                 return;
             case TRUE:
-                refund = Map.of(player, refund.values().stream().mapToDouble(Double::doubleValue).sum());
+                var v = refund.values().stream().mapToDouble(Double::doubleValue).sum();
+                refund.clear(); // 使いまわし
+                refund.put(player, v);
                 break;
             case PAYER:
                 break;
@@ -191,11 +132,10 @@ public class FlyCommand implements TabExecutor {
     }
 
     private void persistFly(Player player) {
-        if (economy != null) {
-            if (!economy.withdraw(player, config.economy.price)) {
-                message.get(player).paymentInsufficient.apply().send(player);
-                return;
-            }
+        if (!economy.withdraw(player, config.economy.price)) {
+            // TODO: お金足りない
+            player.sendMessage("money not enough");
+            return;
         }
 
         fly.addCredit(player, config.economy.price, 1, player);
