@@ -21,7 +21,7 @@ public class VaultEconomy {
             throw new IllegalStateException("Vault not found");
         }
 
-        var rsp = Bukkit.getServer().getServicesManager().getRegistration(Economy.class);
+        var rsp = Bukkit.getServicesManager().getRegistration(Economy.class);
         if (rsp == null) {
             throw new IllegalStateException("Vault Economy is not available");
         }
@@ -59,6 +59,10 @@ public class VaultEconomy {
         return m.matches()
             ? Bukkit.getOfflinePlayer(UUID.fromString(m.replaceFirst("$1-$2-$3-$4-$5")))
             : Bukkit.getOfflinePlayer(value);
+    }
+
+    public String format(double value) {
+        return economy.format(value);
     }
 
     // TODO: インターフェースすり替え方針ではダメ、都度有効か見ないと

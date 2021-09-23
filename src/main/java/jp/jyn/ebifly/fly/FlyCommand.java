@@ -1,14 +1,15 @@
 package jp.jyn.ebifly.fly;
 
 import jp.jyn.ebifly.EbiFly;
-import jp.jyn.ebifly.EbiFlyPlugin;
+import jp.jyn.ebifly.PluginMain;
 import jp.jyn.ebifly.config.MainConfig;
 import jp.jyn.ebifly.config.MessageConfig;
 import jp.jyn.jbukkitlib.config.locale.BukkitLocale;
+import jp.jyn.jbukkitlib.config.parser.component.ComponentVariable;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.command.TabExecutor;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.PluginDescriptionFile;
@@ -17,31 +18,61 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public class FlyCommand implements TabExecutor {
-    private final EbiFlyPlugin plugin;
-
-    private final MainConfig config;
     private final BukkitLocale<MessageConfig> message;
     private final EbiFly fly;
     private final VaultEconomy economy;
+
     private final Consumer<CommandSender> checker;
+    private final BiConsumer<CommandSender, Consumer<CommandSender>> reload;
 
     private final PluginDescriptionFile description;
 
-    public FlyCommand(EbiFlyPlugin plugin, MainConfig config, BukkitLocale<MessageConfig> message,
-                      EbiFly fly, VaultEconomy economy,
-                      Consumer<CommandSender> checker) {
-        this.plugin = plugin;
+    private final double price;
+    private final MainConfig.EconomyConfig.RefundType refundType;
 
-        this.config = config; // TODO: 値取り出す
+    private final Consumer<Location> noticeEnable;
+    private final Consumer<Location> noticeDisable;
+    private final Consumer<Location> noticeEnablePaid;
+    private final Consumer<Location> noticePayment;
+
+    public FlyCommand(PluginMain plugin, MainConfig config, BukkitLocale<MessageConfig> message,
+                      EbiFly fly, VaultEconomy economy,
+                      Consumer<CommandSender> checker, BiConsumer<CommandSender, Consumer<CommandSender>> reload) {
         this.message = message;
         this.fly = fly;
         this.economy = economy;
-        this.description = plugin.getDescription();
+
         this.checker = checker;
+        this.reload = reload;
+
+        this.description = plugin.getDescription();
+
+        if (isEconomyEnable()) {
+            this.price = config.economy.price;
+            this.refundType = config.economy.refund;
+
+            this.noticeEnablePaid = config.noticeEnable.marge(config.noticePayment);
+        } else {
+            this.price = 0;
+            this.refundType = null;
+
+            this.noticeEnablePaid = config.noticeEnable.marge();
+        }
+
+        noticeEnable = config.noticeEnable.marge();
+        noticeDisable = config.noticeDisable.marge();
+        noticePayment = config.noticePayment.marge();
+        // TODO: 権限チェック
+    }
+
+    private boolean isEconomyEnable() {
+        return economy != null;
     }
 
     @Override
@@ -69,7 +100,7 @@ public class FlyCommand implements TabExecutor {
         //fly reload/version/help
         Consumer<CommandSender> cmd = switch (args[0].toLowerCase(Locale.ROOT)) {
             case "version" -> this::version;
-            case "reload" -> this::reload;
+            case "reload" -> s1 -> reload.accept(s1, s2 -> message.get(s2).permissionError.apply().send(s2));
             case "help" -> this::help;
             default -> null;
         };
@@ -109,67 +140,107 @@ public class FlyCommand implements TabExecutor {
 
     private void stop(Player player) {
         var refund = fly.stop(player);
-        switch (config.economy.refund) {
-            case FALSE:
-                return;
-            case TRUE:
-                var v = refund.values().stream().mapToDouble(Double::doubleValue).sum();
-                refund.clear(); // 使いまわし
-                refund.put(player, v);
-                break;
-            case PAYER:
-                break;
+        message.get(player).flyDisable.apply().send(player);
+        noticeDisable.accept(player.getEyeLocation());
+        if (!isEconomyEnable() || refundType == MainConfig.EconomyConfig.RefundType.FALSE || refund.isEmpty()) {
+            return;
         }
 
+
+        if (refundType == MainConfig.EconomyConfig.RefundType.TRUE) {
+            refund = Map.of(player, refund.values().stream().mapToDouble(Double::doubleValue).sum());
+        }
+
+        var v = ComponentVariable.init();
         for (var entry : refund.entrySet()) {
             economy.deposit(entry.getKey(), entry.getValue());
             var p = entry.getKey().getPlayer();
             if (p != null) {
-                p.sendMessage("refund " + entry.getValue());
+                v.put("player", p::getName);
+                v.put("price", () -> economy.format(entry.getValue()));
+
+                var l = message.get(p).payment;
+                (p.equals(player) ? l.refund : l.refundOther).accept(p, v);
             }
-            // TODO: メッセージ
         }
     }
 
     private void persistFly(Player player) {
-        if (!economy.withdraw(player, config.economy.price)) {
-            // TODO: お金足りない
-            player.sendMessage("money not enough");
-            return;
+        var l = message.get(player);
+        if (isEconomyEnable()) {
+            var v = ComponentVariable.init().put("price", () -> economy.format(price));
+            if (!economy.withdraw(player, price)) {
+                l.payment.insufficient.accept(player, v);
+                return;
+            }
+
+            l.payment.persistP.accept(player, v);
+            fly.addCredit(player, price, 1, player);
+        } else {
+            fly.addCredit(player, 1);
         }
 
-        fly.addCredit(player, config.economy.price, 1, player);
         if (!fly.persist(player)) {
-            // TODO: エラー、普通はないはず。
-            player.sendMessage("unknown error");
-            return;
+            // エラー、普通はないはず。
+            throw new IllegalStateException("persist failed, thread conflict?");
         }
 
-        // TODO: メッセージ
-        player.sendMessage("start persist fly");
+        noticeEnablePaid.accept(player.getEyeLocation());
+        l.flyEnable.apply().send(player);
     }
 
     private void addCredit(CommandSender sender, Player recipient, int minute) {
-        Player payer = sender == recipient ? recipient : sender instanceof Player p ? p : null;
+        boolean self = sender.equals(recipient);
+        Player payer = sender instanceof Player p ? p : null;
+        var p = price;
 
-        if (payer != null && !economy.withdraw(payer, config.economy.price * minute)) {
-            // TODO: 金タリン
-            payer.sendMessage("money not enough");
-            return;
-        }
+        if (isEconomyEnable() && payer != null) {
+            var l = message.get(payer).payment;
+            var v = ComponentVariable.init().put("price", economy.format(p * minute));
+            if (!economy.withdraw(payer, p * minute)) {
+                l.insufficient.accept(payer, v);
+                return;
+            }
 
-        if (fly.addCredit(recipient, config.economy.price, minute, payer)) {
-            // 飛び始めた
-            recipient.sendMessage("start fly");
-        }
-
-        // TODO: メッセージ
-        if (recipient.equals(sender)) {
-            // 自分で払った
-            recipient.sendMessage("pay " + config.economy.price * minute);
+            v.put("time", minute);
+            if (self) {
+                l.self.accept(payer, v);
+            } else {
+                v.put("player", recipient.getName());
+                l.other.accept(payer, v);
+                v.put("player", payer.getName());
+                l.receive.accept(recipient, v);
+            }
         } else {
-            recipient.sendMessage("receive credit " + minute);
-            sender.sendMessage("send credit " + minute);
+            payer = null;
+            p = 0.0d;
+
+            var v = ComponentVariable.init().put("time", minute);
+            v.put("player", recipient.getName());
+            message.get(sender).flySend.apply(v).send(sender);
+            v.put("player", sender.getName()); // TODO: コンソールの時にどうなる？
+            message.get(recipient).flyReceive.apply(v).send(recipient);
+        }
+
+        // 経済無効、飛び始め -> 自分にenable
+        // 自腹、飛び始め -> 自分にenable paid
+        // 奢り、飛び始め -> 自分にenable、支払人にpaid
+        // 飛行中 -> 支払人にpaid
+        if (fly.addCredit(recipient, p, minute, payer)) {
+            // 飛び始めた
+            message.get(recipient).flyEnable.apply().send(recipient);
+            if (payer == null) {
+                noticeEnable.accept(recipient.getEyeLocation());
+            } else if (self) {
+                noticeEnablePaid.accept(recipient.getEyeLocation());
+            } else {
+                noticeEnable.accept(recipient.getEyeLocation());
+                noticePayment.accept(payer.getEyeLocation());
+            }
+        } else {
+            if (payer != null) {
+                noticePayment.accept(payer.getEyeLocation());
+            }
         }
     }
 
@@ -188,25 +259,6 @@ public class FlyCommand implements TabExecutor {
             sender instanceof Player p ? p.getLocale() : message.get().locale)
         );
         checker.accept(sender);
-    }
-
-    private void reload(CommandSender sender) {
-        if (!sender.hasPermission("ebifly.reload")) {
-            message.get(sender).permissionError.apply().send(sender);
-            return;
-        }
-        sender.sendMessage(MessageConfig.PREFIX + "Trying reload...");
-        plugin.onDisable(); // 例外は無視
-        try {
-            plugin.onEnable();
-            sender.sendMessage(MessageConfig.PREFIX + "Reload done!");
-        } catch (Exception e) {
-            e.printStackTrace();
-            if (!(sender instanceof ConsoleCommandSender)) {
-                sender.sendMessage(e.toString());
-            }
-            sender.sendMessage(MessageConfig.PREFIX + "Reload error!");
-        }
     }
 
     private void help(CommandSender sender) {

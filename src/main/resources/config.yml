@@ -3,6 +3,8 @@ versionCheck: true
 safety:
   fall: true
   lava: 60
+  limit: 0 # Safety protect limit. (unit: [d]ay/[h]our/[m]inute/[s]econd, 0 for unlimited)
+  cleanup: 1d12h # Deleted after a specified period of time after logout. (unit: d/h/m/s, 0 for disabled)
 
 #disabling:
 #  levitation: false
@@ -11,57 +13,58 @@ safety:
 # Vault required.
 economy:
   enable: true
-  async: false
-  price: 500
+  price: 500 # per minute price
   margin: 10 # If the refund amount is less than this, no refund will be given.
   # player, credit, time
   #cost: "500*(((player-1)/5)+1)"
   server: "" # Server account (Name or UUID, UUID is better.)
   refund: true # true/false/payer (Hint: 'payer' is refund to payer)
+  async: false # If economy plugin have async support, change to 'true' for little better performance.
 
 notice:
   enable:
-    message: chat # false/chat/actionbar
     particle:
       type: VILLAGER_HAPPY # false/enum ( https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Particle.html )
       count: 10
       offset: { x:0.5, y:0.5, z:0.5 }
+      extra: 0 # extra data (Also known as 'speed')
     sound:
       type: BLOCK_NOTE_BLOCK_CHIME # false/enum ( https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Sound.html )
       volume: 1.0
       pitch: 0.8
   disable:
-    message: chat
     particle:
       type: SMOKE_LARGE
       count: 5
       offset: { x:0.5, y:0.5, z:0.5 }
+      extra: 0
     sound:
       type: BLOCK_NOTE_BLOCK_FLUTE
       volume: 1.0
       pitch: 0.5
   timeout:
-    second: 30 # Warn before the end of flight. (Must be less than 60)
-    message: chat
+    actionbar: true # Show message to action bar for suppress chat log.
+    second: 30 # Warn before the end of flight. (Unit: second, Must be less than 60, 0 for disabled)
     particle:
       type: FIREWORKS_SPARK
       count: 10
       offset: { x:0.5, y:0.5, z:0.5 }
+      extra: 0.1
     sound:
       type: BLOCK_NOTE_BLOCK_PLING
       volume: 1.0
       pitch: 0.7
   payment:
-    message: chat
-    persist: actionbar # for persist flight payment.
+    actionbar: true # for persist flight payment.
     particle:
       type: BUBBLE_POP
-      count: 1
+      count: 10
       offset: { x:0, y:0, z:0 }
+      extra: 0
     sound:
       type: BLOCK_NOTE_BLOCK_BELL
       volume: 1.0
-      pitch: 1.0
+      pitch: 1.2
 # payment.persist
 # timeout.before
 

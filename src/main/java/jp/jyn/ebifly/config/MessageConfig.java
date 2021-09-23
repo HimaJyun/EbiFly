@@ -1,18 +1,24 @@
 package jp.jyn.ebifly.config;
 
-import jp.jyn.ebifly.EbiFlyPlugin;
+import jp.jyn.ebifly.PluginMain;
 import jp.jyn.jbukkitlib.config.YamlLoader;
 import jp.jyn.jbukkitlib.config.parser.component.ComponentParser;
+import jp.jyn.jbukkitlib.config.parser.component.ComponentVariable;
 import org.bukkit.ChatColor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.MemoryConfiguration;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import java.util.Objects;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 public class MessageConfig {
     public final static String PREFIX = "[EbiFly] ";
-    public final static String HEADER = "========== EbiFly ==========";
     public final static String PLAYER_ONLY = PREFIX + ChatColor.RED + "This command can only be run by players.";
 
     public final String locale;
@@ -21,16 +27,44 @@ public class MessageConfig {
     public final ComponentParser playerNotFound;
     public final ComponentParser permissionError;
 
+    public final ComponentParser flyEnable;
+    public final ComponentParser flyDisable;
+    public final ComponentParser flyTimeout;
+    public final ComponentParser flySend;
+    public final ComponentParser flyReceive;
+
+    public final PaymentMessage payment;
     public final HelpMessage help;
 
-    public MessageConfig(EbiFlyPlugin plugin, String locale) {
+    public MessageConfig(PluginMain plugin, String locale, MainConfig main) {
         this.locale = locale;
         var config = loadConfig(plugin, locale);
+        UnaryOperator<String> s = k -> {
+            var v = config.getString(k);
+            if (v == null || v.isEmpty()) {
+                plugin.getLogger().warning("%s is null or empty in locale/%s.yml".formatted(k, locale));
+                return "";
+            }
+            return v;
+        };
 
-        invalidNumber = p(config.getString("invalidNumber"));
-        playerNotFound = p(config.getString("playerNotFound"));
-        permissionError = p(config.getString("permissionError"));
+        invalidNumber = p(s.apply("invalidNumber"));
+        playerNotFound = p(s.apply("playerNotFound"));
+        permissionError = p(s.apply("permissionError"));
 
+        flyEnable = p(s.apply("fly.enable"));
+        flyDisable = p(s.apply("fly.disable"));
+        flySend = p(s.apply("fly.send"));
+        flyReceive = p(s.apply("fly.receive"));
+        flyTimeout = main.noticeTimeoutActionbar
+            ? ComponentParser.parse(s.apply("fly.timeout"))
+            : p(s.apply("fly.timeout"));
+
+        payment = new PaymentMessage(main.economy != null
+            ? Objects.requireNonNull(config.getConfigurationSection("payment"))
+            : new MemoryConfiguration()
+            , main
+        );
         help = new HelpMessage(Objects.requireNonNull(config.getConfigurationSection("help")));
     }
 
@@ -49,6 +83,50 @@ public class MessageConfig {
 
     private static ComponentParser p(String value) {
         return ComponentParser.parse(PREFIX + value);
+    }
+
+    public final static class PaymentMessage {
+        public final BiConsumer<Player, ComponentVariable> persist;
+        public final BiConsumer<Player, ComponentVariable> persistP; // 常にプレフィックス持ち
+        public final BiConsumer<Player, ComponentVariable> self;
+        public final BiConsumer<Player, ComponentVariable> other;
+        public final BiConsumer<Player, ComponentVariable> receive;
+        public final BiConsumer<Player, ComponentVariable> refund;
+        public final BiConsumer<Player, ComponentVariable> refundOther;
+        public final BiConsumer<Player, ComponentVariable> insufficient;
+
+        private PaymentMessage(ConfigurationSection config, MainConfig main) {
+            UnaryOperator<String> s = k -> config.getString(k, null);
+            if (main.noticePaymentActionbar) {
+                var v = s.apply("persist");
+                persist = cc(v, ComponentParser::parse);
+                persistP = c(v);
+            } else {
+                persist = persistP = c(s.apply("persist"));
+
+            }
+            self = c(s.apply("self"));
+            other = c(s.apply("other"));
+            receive = c(s.apply("receive"));
+            refund = c(s.apply("refund"));
+            refundOther = c(s.apply("refundOther"));
+            insufficient = c(s.apply("insufficient"));
+        }
+
+        private static <T extends CommandSender> BiConsumer<T, ComponentVariable> c(String value) {
+            return cc(value, MessageConfig::p);
+        }
+
+        private static <T extends CommandSender> BiConsumer<T, ComponentVariable> cc(
+            String value, Function<String, ComponentParser> mapper
+        ) {
+            if (value == null || value.isEmpty()) {
+                return (p, v) -> {};
+            }
+
+            var c = mapper.apply(value);
+            return (p, v) -> c.apply(v).send(p);
+        }
     }
 
     public final static class HelpMessage {

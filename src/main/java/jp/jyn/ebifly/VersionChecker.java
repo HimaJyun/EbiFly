@@ -27,7 +27,7 @@ class VersionChecker {
     private final Plugin plugin;
 
     @PackagePrivate
-    VersionChecker(EbiFlyPlugin plugin) {
+    VersionChecker(PluginMain plugin) {
         this.plugin = plugin;
     }
 

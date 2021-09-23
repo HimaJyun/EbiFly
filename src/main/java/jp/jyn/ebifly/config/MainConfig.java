@@ -1,15 +1,19 @@
 package jp.jyn.ebifly.config;
 
-import jp.jyn.ebifly.EbiFlyPlugin;
+import jp.jyn.ebifly.PluginMain;
 import jp.jyn.jbukkitlib.config.YamlLoader;
+import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.SoundCategory;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.Plugin;
 
 import java.util.Locale;
 import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.logging.Logger;
 
 public class MainConfig {
     public final boolean versionCheck;
@@ -32,9 +36,11 @@ public class MainConfig {
     public final NoticeConfig noticePayment;
 
     public final int noticeTimeoutSecond;
-    public final NoticeConfig.MessagePosition noticePaymentPersist;
+    public final boolean noticeTimeoutActionbar;
+    public final boolean noticePaymentActionbar;
 
-    public MainConfig(EbiFlyPlugin plugin) {
+    public MainConfig(PluginMain plugin) {
+        var logger = plugin.getLogger();
         var config = loadConfig(plugin);
         versionCheck = config.getBoolean("versionCheck");
 
@@ -44,22 +50,32 @@ public class MainConfig {
         localeEnable = config.getBoolean("locale.enable");
         localeDefault = Objects.requireNonNull(config.getString("locale.default"), "locale.default is null");
 
-        economy = config.getBoolean("economy.enable")
-            ? new EconomyConfig(plugin, getSection(plugin, config, "economy"))
-            : null;
+        if (config.getBoolean("economy.enable")) {
+            var e = new EconomyConfig(logger, getSection(logger, config, "economy"));
+            if (Double.compare(e.price, 0) <= 0) {
+                logger.warning("economy.price is 0 or less in config.yml");
+                logger.warning("Disabled economy feature.");
+                economy = null;
+            } else {
+                economy = e;
+            }
+        } else {
+            economy = null;
+        }
 
-        noticeEnable = new NoticeConfig(plugin, getSection(plugin, config, "notice.enable"));
-        noticeDisable = new NoticeConfig(plugin, getSection(plugin, config, "notice.disable"));
-        noticeTimeout = new NoticeConfig(plugin, getSection(plugin, config, "notice.timeout"));
-        noticePayment = new NoticeConfig(plugin, getSection(plugin, config, "notice.payment"));
+        noticeEnable = new NoticeConfig(logger, getSection(logger, config, "notice.enable"));
+        noticeDisable = new NoticeConfig(logger, getSection(logger, config, "notice.disable"));
+        noticeTimeout = new NoticeConfig(logger, getSection(logger, config, "notice.timeout"));
+        noticePayment = new NoticeConfig(logger, getSection(logger, config, "notice.payment"));
 
         int second = config.getInt("notice.timeout.second");
         if (second > 60) {
-            plugin.getLogger().severe("notice.timeout.second is greater than 60 in config.yml");
-            plugin.getLogger().severe("Using 60");
+            logger.severe("notice.timeout.second is greater than 60 in config.yml");
+            logger.severe("Using 60");
         }
         noticeTimeoutSecond = Math.min(second, 60);
-        noticePaymentPersist = NoticeConfig.getPosition(config.getString("notice.payment.persist"));
+        noticeTimeoutActionbar = config.getBoolean("notice.timeout.actionbar", false);
+        noticePaymentActionbar = config.getBoolean("notice.payment.actionbar", false);
     }
 
     private static FileConfiguration loadConfig(Plugin plugin) {
@@ -82,19 +98,17 @@ public class MainConfig {
         return c;
     }
 
-    // TODO: plugin渡すのではなくLoggerを渡す方が良い
-    private static ConfigurationSection getSection(Plugin plugin, ConfigurationSection config, String key) {
+    private static ConfigurationSection getSection(Logger logger, ConfigurationSection config, String key) {
         final String msg = "Default is null, broken plugin!!" +
-            " You using non-modded jar? Please try re-download jar." +
+            " You using non-modded jar? Please try re-download jar and checking hash." +
             " (from: https://github.com/HimaJyun/EbiFly/ )";
-        var l = plugin.getLogger();
         if (!config.contains(key, true)) {
-            l.severe("%s is not found in config.yml".formatted(key));
-            l.severe("Using default value.");
+            logger.severe("%s is not found in config.yml".formatted(key));
+            logger.severe("Using default value.");
             return Objects.requireNonNull(config.getConfigurationSection(key), msg);
         } else if (!config.isConfigurationSection(key)) {
-            l.severe("%s is not valid value in config.yml".formatted(key));
-            l.severe("Using default value.");
+            logger.severe("%s is not valid value in config.yml".formatted(key));
+            logger.severe("Using default value.");
             var d = Objects.requireNonNull(config.getDefaultSection(), msg);
             return Objects.requireNonNull(d.getConfigurationSection(key), msg);
         } else {
@@ -113,31 +127,24 @@ public class MainConfig {
         public final String server;
         public final RefundType refund;
 
-        private EconomyConfig(Plugin plugin, ConfigurationSection config) {
-            async = config.getBoolean("async");
+        private EconomyConfig(Logger logger, ConfigurationSection config) {
+            price = config.getDouble("price");
             margin = config.getDouble("margin");
             server = config.getString("server");
-
-            var l = plugin.getLogger();
-            double v = config.getDouble("price");
-            if (Double.compare(v, 0.0) < 0) {
-                l.warning("economy.price is less than 0 in config.yml");
-                l.warning("Using 0");
-            }
-            price = Math.max(0.0d, v);
+            async = config.getBoolean("async");
 
             var r = config.getString("refund");
             RefundType t;
             if (r == null) {
-                l.severe("economy.refund is null in config.yml");
-                l.severe("Using default value");
+                logger.severe("economy.refund is null in config.yml");
+                logger.severe("Using default value");
                 r = RefundType.TRUE.name();
             }
             try {
                 t = RefundType.valueOf(r.toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
-                l.severe("%s is invalid value in config.yml".formatted(r));
-                l.severe("Using default value");
+                logger.severe("%s is invalid value in config.yml".formatted(r));
+                logger.severe("Using default value");
                 t = RefundType.TRUE;
             }
             refund = t;
@@ -145,82 +152,73 @@ public class MainConfig {
     }
 
     public static class NoticeConfig {
-        public enum MessagePosition {CHAT, ACTION_BAR, FALSE}
+        private final static Consumer<Location> DISABLE = ignore -> {};
 
-        public final MessagePosition message;
+        public final Consumer<Location> particle;
+        public final Consumer<Location> sound;
 
-        public final Particle particle;
-        public final int particleCount;
-        public final double particleOffsetX;
-        public final double particleOffsetY;
-        public final double particleOffsetZ;
-
-        public final Sound sound;
-        public final float soundVolume;
-        public final float soundPitch;
-
-        private NoticeConfig(Plugin plugin, ConfigurationSection config) {
-            message = getPosition(config.getString("message"));
-
-            if (isEnable(config, "particle")) {
-                particle = getType(Particle.class, plugin, config, "particle");
-
-                particleCount = config.getInt("particle.count", 1);
+        private NoticeConfig(Logger logger, ConfigurationSection config) {
+            var p = getType(Particle.class, logger, config, "particle");
+            if (p == null) {
+                particle = DISABLE;
+            } else {
+                var c = config.getInt("particle.count", 1);
+                var e = config.getDouble("particle.extra", 0d);
+                double x, y, z;
                 if (config.contains("particle.offset", true) && config.isDouble("particle.offset")) {
                     // 隠し機能、offsetに数値を指定するとxyzに同じ値を設定
-                    particleOffsetX = particleOffsetY = particleOffsetZ = config.getDouble("particle.offset", 0d);
+                    x = y = z = config.getDouble("particle.offset", 0d);
                 } else {
-                    particleOffsetX = config.getDouble("particle.offset.x", 0d);
-                    particleOffsetY = config.getDouble("particle.offset.y", 0d);
-                    particleOffsetZ = config.getDouble("particle.offset.z", 0d);
+                    x = config.getDouble("particle.offset.x", 0d);
+                    y = config.getDouble("particle.offset.y", 0d);
+                    z = config.getDouble("particle.offset.z", 0d);
                 }
-            } else {
-                particle = null;
-                particleCount = 0;
-                particleOffsetX = particleOffsetY = particleOffsetZ = 0;
+                particle = l -> Objects.requireNonNull(l.getWorld(), "Location don't have world.")
+                    .spawnParticle(p, l, c, x, y, z, e);
             }
 
-            if (isEnable(config, "sound")) {
-                sound = getType(Sound.class, plugin, config, "sound");
-                soundVolume = (float) config.getDouble("sound.volume", 1.0d);
-                soundPitch = (float) config.getDouble("sound.pitch", 1.0d);
+            var s = getType(Sound.class, logger, config, "sound");
+            if (s == null) {
+                sound = DISABLE;
             } else {
-                sound = null;
-                soundVolume = soundPitch = 0.0f;
+                var v = (float) config.getDouble("sound.volume", 1.0d);
+                var pi = (float) config.getDouble("sound.pitch", 1.0d);
+                sound = l -> Objects.requireNonNull(l.getWorld(), "Location don't have world.")
+                    .playSound(l, s, SoundCategory.PLAYERS, v, pi);
             }
         }
 
-        private static <E extends Enum<E>> E getType(Class<E> clazz, Plugin plugin,
+        public Consumer<Location> marge() {
+            return particle != DISABLE && sound != DISABLE ? particle.andThen(sound)
+                : particle == DISABLE ? sound : particle;
+        }
+
+        public Consumer<Location> marge(NoticeConfig second) {
+            var p = particle != DISABLE ? particle : second.particle;
+            var s = sound != DISABLE ? sound : second.sound;
+            return p != DISABLE && s != DISABLE ? p.andThen(s) : p == DISABLE ? s : p;
+        }
+
+        private static <E extends Enum<E>> E getType(Class<E> clazz, Logger logger,
                                                      ConfigurationSection config, String key) {
-            var k = key + ".type";
+            if (!config.contains(key, true) || !config.isConfigurationSection(key)) {
+                return null;
+            }
+
+            final var k = key + ".type";
             try {
-                return Enum.valueOf(clazz, config.getString(k, "").toUpperCase(Locale.ROOT));
+                var v = config.getString(k, "").toUpperCase(Locale.ROOT);
+                if (v.equals("FALSE") || v.equals("NULL") || v.isEmpty()) { // 隠し機能、実はNULLや空文字でも出力ストップが可能
+                    return null;
+                }
+
+                return Enum.valueOf(clazz, v);
             } catch (IllegalArgumentException e) {
-                plugin.getLogger().severe("%s is invalid value in config.yml".formatted(
+                logger.severe("%s is invalid value in config.yml".formatted(
                     config.getString(k, config.getCurrentPath() + "." + k))
                 );
                 return null;
             }
-        }
-
-        private static boolean isEnable(ConfigurationSection config, String key) {
-            return config.contains(key, true)
-                && config.isConfigurationSection(key)
-                && switch (config.getString(key + ".type", "false").toUpperCase(Locale.ROOT)) {
-                case "FALSE", "NULL" -> false;
-                default -> true;
-            };
-        }
-
-        private static MessagePosition getPosition(String value) {
-            if (value == null) {
-                return MessagePosition.FALSE;
-            }
-            return switch (value.toUpperCase(Locale.ROOT)) {
-                case "CHAT", "TRUE" -> MessagePosition.CHAT;
-                case "ACTIONBAR", "ACTION_BAR" -> MessagePosition.ACTION_BAR;
-                default -> MessagePosition.FALSE;
-            };
         }
     }
 }

@@ -1,4 +1,4 @@
-main: "jp.jyn.ebifly.EbiFlyPlugin"
+main: "jp.jyn.ebifly.PluginMain"
 name: "EbiFly"
 version: "${project.version}"
 website: "${project.url}"

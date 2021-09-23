@@ -5,6 +5,8 @@ import org.bukkit.entity.Player;
 
 import java.util.Map;
 
+// Currently, not available API Maven repository. This plugin API is probably not needed by other plugins.
+// You need API Maven repository? Please post issue to me! ( https://github.com/HimaJyun/EbiFly/issues )
 public interface EbiFly {
     /**
      * Check fly mode
@@ -15,7 +17,8 @@ public interface EbiFly {
     boolean isFlying(Player player);
 
     /**
-     * Enabling persistent fly mode.
+     * Enabling persistent fly mode.<br>
+     * This method require credits.
      *
      * @param player target player
      * @return true if success, false if not flying or credit not enough.
