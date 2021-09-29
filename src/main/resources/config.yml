@@ -14,9 +14,6 @@ safety:
 economy:
   enable: true
   price: 500 # per minute price
-  margin: 10 # If the refund amount is less than this, no refund will be given.
-  # player, credit, time
-  #cost: "500*(((player-1)/5)+1)"
   server: "" # Server account (Name or UUID, UUID is better.)
   refund: true # true/false/payer (Hint: 'payer' is refund to payer)
   async: false # If economy plugin have async support, change to 'true' for little better performance.
@@ -26,7 +23,7 @@ notice:
     particle:
       type: VILLAGER_HAPPY # false/enum ( https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Particle.html )
       count: 10
-      offset: { x:0.5, y:0.5, z:0.5 }
+      offset: { x: 0.5, y: 0.5, z: 0.5 } # Hint: Need space, 'x:0' is invalid, 'x: 0' is valid.
       extra: 0 # extra data (Also known as 'speed')
     sound:
       type: BLOCK_NOTE_BLOCK_CHIME # false/enum ( https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Sound.html )
@@ -36,19 +33,22 @@ notice:
     particle:
       type: SMOKE_LARGE
       count: 5
-      offset: { x:0.5, y:0.5, z:0.5 }
+      offset: # other format
+        x: 0.5
+        y: 0.5
+        z: 0.5
       extra: 0
     sound:
       type: BLOCK_NOTE_BLOCK_FLUTE
       volume: 1.0
       pitch: 0.5
   timeout:
-    actionbar: true # Show message to action bar for suppress chat log.
+    actionbar: false # Show message to action bar for suppress chat log.
     second: 30 # Warn before the end of flight. (Unit: second, Must be less than 60, 0 for disabled)
     particle:
       type: FIREWORKS_SPARK
       count: 10
-      offset: { x:0.5, y:0.5, z:0.5 }
+      offset: 0.5 # syntax sugar
       extra: 0.1
     sound:
       type: BLOCK_NOTE_BLOCK_PLING
@@ -59,7 +59,7 @@ notice:
     particle:
       type: BUBBLE_POP
       count: 10
-      offset: { x:0, y:0, z:0 }
+      offset: { x: 0.5, y: 0.5, z: 0.5 }
       extra: 0
     sound:
       type: BLOCK_NOTE_BLOCK_BELL

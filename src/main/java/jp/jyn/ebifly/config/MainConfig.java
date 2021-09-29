@@ -121,15 +121,12 @@ public class MainConfig {
 
         public final boolean async; // TODO: 常に同期で良い？
         public final double price;
-        public final double margin; // TODO: 使わない？
-        //public final ExpressionParser dynamicCost; // TODO: 要らない？
 
         public final String server;
         public final RefundType refund;
 
         private EconomyConfig(Logger logger, ConfigurationSection config) {
             price = config.getDouble("price");
-            margin = config.getDouble("margin");
             server = config.getString("server");
             async = config.getBoolean("async");
 
@@ -157,6 +154,8 @@ public class MainConfig {
         public final Consumer<Location> particle;
         public final Consumer<Location> sound;
 
+        private Consumer<Location> merged = null;
+
         private NoticeConfig(Logger logger, ConfigurationSection config) {
             var p = getType(Particle.class, logger, config, "particle");
             if (p == null) {
@@ -166,12 +165,12 @@ public class MainConfig {
                 var e = config.getDouble("particle.extra", 0d);
                 double x, y, z;
                 if (config.contains("particle.offset", true) && config.isDouble("particle.offset")) {
-                    // 隠し機能、offsetに数値を指定するとxyzに同じ値を設定
-                    x = y = z = config.getDouble("particle.offset", 0d);
+                    // offsetに数値を指定するとxyzに同じ値を設定
+                    x = y = z = config.getDouble("particle.offset", 0.5);
                 } else {
-                    x = config.getDouble("particle.offset.x", 0d);
-                    y = config.getDouble("particle.offset.y", 0d);
-                    z = config.getDouble("particle.offset.z", 0d);
+                    x = config.getDouble("particle.offset.x", 0.5);
+                    y = config.getDouble("particle.offset.y", 0.5);
+                    z = config.getDouble("particle.offset.z", 0.5);
                 }
                 particle = l -> Objects.requireNonNull(l.getWorld(), "Location don't have world.")
                     .spawnParticle(p, l, c, x, y, z, e);
@@ -188,12 +187,13 @@ public class MainConfig {
             }
         }
 
-        public Consumer<Location> marge() {
-            return particle != DISABLE && sound != DISABLE ? particle.andThen(sound)
-                : particle == DISABLE ? sound : particle;
+        public Consumer<Location> merge() {
+            return merged != null ? merged
+                : (merged = (particle != DISABLE && sound != DISABLE ? particle.andThen(sound)
+                : particle == DISABLE ? sound : particle));
         }
 
-        public Consumer<Location> marge(NoticeConfig second) {
+        public Consumer<Location> merge(NoticeConfig second) {
             var p = particle != DISABLE ? particle : second.particle;
             var s = sound != DISABLE ? sound : second.sound;
             return p != DISABLE && s != DISABLE ? p.andThen(s) : p == DISABLE ? s : p;

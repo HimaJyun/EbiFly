@@ -2,15 +2,21 @@ invalidNumber: "&cInvalid number&r: {value}"
 playerNotFound: "&cPlayer not found&r: {name}"
 permissionError: "&cYou don't have permission!"
 
-flyEnable: "Flight is enabled! ({price} at {minute} minute)"
-flyPersist: "Persist flight is enable! ({price} per minute)"
-flyDisable: "Flight is disable!"
+fly:
+  enable: "Flight is &aenabled&r!"
+  disable: "Flight is &cdisable&r!"
+  timeout: "&cFlight will end in &r{time} seconds&c!"
+  send: "Send {time} credits to {player}!"
+  receive: "Receive {time} credits from {player}!"
 
-paymentPersist: "You paid {price} for flight!"
-payemntOther: "You paid {price} for the flight of {player}!"
-paymentReceive: "{player} paid the flight fee {price} for {time} minutes!"
-refund: "Refunded {price} for unused flight!"
-refundOther: "{price} has been refunded because {player} has disabled the flight."
+payment:
+  persist: "You paid {price} for flight!"
+  self: "You paid {price} for {time} minute flight!"
+  other: "You paid {price} for {time} minute flight of {player}!"
+  receive: "{player} paid for {time} minute flight to You!"
+  refund: "Refunded {price} for unused flight!"
+  refundOther: "{price} has been refunded because {player} has disabled the flight."
+  insufficient: "Insufficient funds! {price} is required to fly!"
 
 help:
   fly: "&aEnable&r/&cDisable&r fly."

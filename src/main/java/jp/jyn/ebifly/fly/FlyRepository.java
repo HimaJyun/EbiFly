@@ -2,6 +2,11 @@ package jp.jyn.ebifly.fly;
 
 import jp.jyn.ebifly.EbiFly;
 import jp.jyn.ebifly.config.MainConfig;
+import jp.jyn.ebifly.config.MessageConfig;
+import jp.jyn.jbukkitlib.config.locale.BukkitLocale;
+import jp.jyn.jbukkitlib.config.parser.component.ComponentVariable;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 
@@ -12,38 +17,86 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
+import java.util.function.LongFunction;
 
 public class FlyRepository implements EbiFly {
-    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
-    private final Map<UUID, FlightStatus> flying = new ConcurrentHashMap<>(); // TODO: keyはUUIDじゃなくてPlayerで良いのでは
+    private final Map<UUID, FlightStatus> flying = new ConcurrentHashMap<>();
 
+    private final BukkitLocale<MessageConfig> message;
+    private final ScheduledExecutorService executor;
     private final VaultEconomy economy;
+    private final Consumer<Runnable> syncCall;
+
     private final double price;
     private final int notify;
-    // TODO: 誤差への考慮が必要
+    private final Consumer<Location> noticeDisable;
+    private final Consumer<Location> noticeTimeout;
+    private final Consumer<Location> noticePayment;
 
-    public FlyRepository(MainConfig config, VaultEconomy economy) {
+    public FlyRepository(MainConfig config, BukkitLocale<MessageConfig> message,
+                         ScheduledExecutorService executor, VaultEconomy economy,
+                         Consumer<Runnable> syncCall) {
+        this.message = message;
+        this.executor = executor;
         this.economy = economy;
+        this.syncCall = syncCall;
+
         this.price = economy == null ? 0 : config.economy.price;
         this.notify = config.noticeTimeoutSecond;
 
-        executor.submit(() -> Thread.currentThread().setName("ebifly-timer"));
+        this.noticeDisable = config.noticeDisable.merge();
+        this.noticeTimeout = config.noticeTimeout.merge();
+        this.noticePayment = economy == null ? ignore -> {} : config.noticePayment.merge();
+    }
+
+    private boolean isNotifyEnabled() {
+        return notify > 0;
+    }
+
+    private FlightStatus remove(Player player, boolean notice) {
+        var r = flying.remove(player.getUniqueId());
+        if (r != null) {
+            r.cancelTimer();
+        }
+
+        // 引数を使わない事でラムダのインスタンスが無駄に作られないように
+        final Consumer<Player> f = p -> {
+            switch (p.getGameMode()) {
+                case SURVIVAL, ADVENTURE -> p.setAllowFlight(false);
+            }
+        };
+        final Consumer<Player> m = notice ? p -> { // IFスリカエ
+            message.get(p).flyDisable.apply().send(p);
+            noticeDisable.accept(p.getEyeLocation());
+        } : p -> {};
+        // 無駄な最適化かも
+
+        // スレッド切り替え
+        if (Bukkit.isPrimaryThread()) {
+            // Player渡して呼ぶだけで済む、ペナルティはほぼゼロのはず
+            f.accept(player);
+            m.accept(player);
+        } else {
+            syncCall.accept(() -> {
+                f.accept(player);
+                m.accept(player);
+            });
+        }
+
+        return r;
     }
 
     private void persistTimer(Player player) {
-        if (!player.isOnline()) {
-            return;
-        }
         var v = flying.get(player.getUniqueId());
         if (v == null) {
             // 飛行してないのにタイマーだけ動いてる、スレッド競合？
-            return;
+            throw new IllegalStateException("Player doesn't flying, Thread conflict?"); // 絶妙なタイミングで飛行停止すると正常でも出るかも
         }
 
         // 周期タイマーのはずなので特に気にせずクレジットを減らす
@@ -75,27 +128,23 @@ public class FlyRepository implements EbiFly {
         // どうやらないっぽい -> ｵｶﾈﾀﾞｰ!!
         if (economy.withdraw(player, price)) {
             // 支払い完了、ﾏｲﾄﾞｱﾘｰ
-            player.sendMessage("payment for persist " + price);
+            message.get(player).payment.persist.accept(player, ComponentVariable.init().put("price",
+                economy.format(price)));
+            noticePayment.accept(player.getEyeLocation()); // TODO: 非同期呼び出し出来ないかも
             cs.addLast(new Credit(price, 1, player));
             return;
         }
 
         // お金ないならｵﾁﾛｰ!
-        player.sendMessage("money not enough for persist");
-        v = flying.remove(player.getUniqueId()); // TODO: この処理切り出す方が良いかもね
-        player.setAllowFlight(false);
-        v.timer.cancel(false);
-        // TODO: タイマーキャンセル
+        message.get(player).payment.insufficient.accept(player, ComponentVariable.init().put("price",
+            economy.format(price)));
+        remove(player, true);
     }
 
-    // TODO: int nofityじゃなくてboolean stopとかにして、値はthis.notify <= 0で渡せばいいのでは？ <- それだとここを呼び出す全ての場所でこの式が必要になる
     private void stopTimer(Player player, boolean notify) {
-        if (!player.isOnline()) {
-            return;
-        }
         var v = flying.get(player.getUniqueId());
         if (v == null) {
-            return;
+            throw new IllegalStateException("Player doesn't flying, Thread conflict?");
         }
 
         // 後の簡略化のためにクレジットを消費させる
@@ -112,29 +161,25 @@ public class FlyRepository implements EbiFly {
         useCredit(v.credit, (int) use);
 
         // クレジット残数チェック
-        int c = 0;
-        for (Credit credit : v.credit) {
-            c += Math.max(credit.minute().get(), 0); // 念のためのマイナス避け
-        }
+        int c = v.credit.stream().mapToInt(m -> Math.max(m.minute().get(), 0)).sum();
 
         // 後からクレジットが追加されてる
         if (c > 1) {
             // 警告タイマーの入れ直し
             // TODO: CASの段階でメモリに取っておく方が良いか？
+            // TODO: これやってること再スケジュールと同じ
             long delay = TimeUnit.MINUTES.toMillis(c) + v.lastConsume.get(); // (残クレジット*60*1000)+最終徴収時刻 == 終了予定時刻
             delay -= System.currentTimeMillis(); // 終了予定時刻 - 現時刻 == 終了予定までの時間
             delay -= this.notify;
-            v.setTimer(executor.schedule(() -> stopTimer(player, this.notify > 0), delay, TimeUnit.MILLISECONDS));
+            v.setTimer(executor.schedule(() -> stopTimer(player, isNotifyEnabled()), delay, TimeUnit.MILLISECONDS));
         } else if (notify) { // 停止タイマー入れ直す
-            player.sendMessage("timeout warning");
             v.setTimer(executor.schedule(() -> stopTimer(player, false), this.notify, TimeUnit.SECONDS));
-            // TODO: ズレ補正のために再計算した方が良い？
+            noticeTimeout.accept(player.getEyeLocation());
+            message.get(player).flyTimeout.accept(player, ComponentVariable.init().put("time", this.notify));
+            // ↑ その気になれば事前にapplyしておける
         } else { // 停止
-            player.sendMessage("timeout stop");
-            flying.remove(player.getUniqueId());
-            player.setAllowFlight(false);
-            v.timer.cancel(false);
-            // TODO: 止める
+            // ズレが大きければコッソリ待つ的な処理があった方が良いかも？ ScheduledExecutorServiceの精度次第
+            remove(player, true);
         }
     }
 
@@ -146,18 +191,16 @@ public class FlyRepository implements EbiFly {
     @Override
     public boolean persist(Player player) {
         var v = flying.get(player.getUniqueId());
-
-        // TODO: 書き直す
-        if (v != null && !v.credit.isEmpty()) {
-            if (v.timer != null) {
-                v.timer.cancel(false);
-            }
-            // TODO: 時間見直した方が良いかも？
-            v.timer = executor.scheduleAtFixedRate(() -> persistTimer(player), 1, 1, TimeUnit.MINUTES);
-            return true;
-        } else {
+        if (v == null || v.credit.isEmpty()) {
+            // 飛んでないか、なぜかクレジットがない
             return false;
         }
+
+        // タイマー変更
+        v.reSchedule(delay -> executor.scheduleAtFixedRate(() -> persistTimer(player),
+            delay, TimeUnit.MINUTES.toMillis(1), TimeUnit.MILLISECONDS));
+        v.persist = true;
+        return true;
     }
 
     @Override
@@ -171,10 +214,11 @@ public class FlyRepository implements EbiFly {
         player.setAllowFlight(true);
 
         // 停止タイマー入れ直し
-        v.reSchedule(
-            executor, () -> stopTimer(player, notify > 0),
-            TimeUnit.MINUTES.toSeconds(minute) - notify, TimeUnit.SECONDS
-        );
+        v.reSchedule(delay -> executor.schedule(
+            () -> stopTimer(player, isNotifyEnabled()),
+            delay + TimeUnit.MINUTES.toMillis(minute) - TimeUnit.SECONDS.toMillis(notify),
+            TimeUnit.MILLISECONDS
+        ));
         return r;
     }
 
@@ -192,13 +236,12 @@ public class FlyRepository implements EbiFly {
 
     @Override
     public Map<OfflinePlayer, Double> stop(Player player) {
-        var v = flying.remove(player.getUniqueId());
+        var v = remove(player, false);
         if (v == null) {
-            return null;
+            return Collections.emptyMap();
         }
-        player.setAllowFlight(false);
 
-        long time = System.currentTimeMillis() - v.lastConsume.get(); // 経過時間
+        long time = v.getElapsed(); // 経過時間
         long min = TimeUnit.MILLISECONDS.toMinutes(time); // 消費クレジット
         long sec = time % (60 * 1000); // 消費秒(ミリ単位) TODO: これ、moduloを先にやってからなら減算1発で済むのでは？
 
@@ -215,7 +258,7 @@ public class FlyRepository implements EbiFly {
         while (true) {
             c = d.pollFirst();
             if (c == null) {
-                return Collections.emptyMap();
+                return Collections.emptyMap(); // TODO: returnして大丈夫？
             }
             if (c.payer() == null) {
                 continue;
@@ -272,7 +315,7 @@ public class FlyRepository implements EbiFly {
         private final Deque<Credit> credit;
 
         private final Object lock = new Object();
-        private ScheduledFuture<?> timer = null;
+        private Future<?> timer = null;
         private volatile boolean persist = false;
 
         private FlightStatus(AtomicLong lastConsume, Deque<Credit> credit) {
@@ -284,21 +327,40 @@ public class FlyRepository implements EbiFly {
             this(new AtomicLong(System.currentTimeMillis()), new ConcurrentLinkedDeque<>());
         }
 
-        private void setTimer(ScheduledFuture<?> timer) {
+        private long getElapsed() {
+            return System.currentTimeMillis() - lastConsume.get();
+            // TODO: millisじゃなくてnanoTimeにした方が良い、経過時間の計算なので(NTPでズレない)
+            // t1 < t0ではなくt1 - t0 < 0を使用すべきですが、それは、数値のオーバーフローが発生する可能性があるからです。
+        }
+
+        private void cancelTimer() {
             synchronized (lock) {
+                if (timer != null) {
+                    timer.cancel(false);
+                }
+            }
+        }
+
+        private void setTimer(Future<?> timer) {
+            synchronized (lock) {
+                if (this.timer != null) {
+                    this.timer.cancel(false);
+                }
                 this.timer = timer;
             }
         }
 
-        private void reSchedule(ScheduledExecutorService executor, Runnable runnable, long delay, TimeUnit unit) {
-            synchronized (lock) {
-                if (timer != null && !timer.isDone()) {
-                    delay = unit.toNanos(delay) + Math.max(timer.getDelay(TimeUnit.NANOSECONDS), 0);
-                    unit = TimeUnit.NANOSECONDS;
-                    timer.cancel(false);
-                }
-                timer = executor.schedule(runnable, delay, unit);
-            }
+        private void reSchedule(LongFunction<Future<?>> scheduler) {
+            long last, delay;
+            do {
+                last = lastConsume.get();
+                // クレジット全数での飛行時間を取得
+                delay = TimeUnit.MINUTES.toMillis(credit.stream().mapToInt(m -> Math.max(m.minute.get(), 0)).sum());
+                // 経過時間分引く
+                delay -= System.currentTimeMillis() - last;
+            } while (last != lastConsume.get()); // Compare And Loop TODO: こんな慎重なカウント処理要る？
+            // ScheduledFuture#getDelayを使う方法だとnotifyの時間分ずつズレるのでこうする
+            setTimer(scheduler.apply(delay));
         }
     }
 

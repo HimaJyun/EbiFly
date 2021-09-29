@@ -5,9 +5,9 @@ permissionError: "&cあなたにはコマンドを実行する権限がありま
 fly:
   enable: "飛行が&a有効&rになりました！"
   disable: "飛行が&c無効&rになりました！"
-  timeout: "&cあと&r{time}秒&cで飛行時間が終了します！"
-  send: "{player}に{time}分間の飛行クレジットを与えました"
-  receive: "{player}から{time}分間の飛行クレジットを受け取りました"
+  timeout: "&cあと&r{time}秒&cで飛行が終了します！"
+  send: "{player}に{time}分間の飛行クレジットを与えました！"
+  receive: "{player}から{time}分間の飛行クレジットを受け取りました！"
 
 payment:
   persist: "飛行のために{price}を支払いました！"
@@ -16,7 +16,7 @@ payment:
   receive: "{player}が{time}分間の飛行料金{price}を払ってくれました！"
   refund: "未使用の飛行料金{price}を返金しました！"
   refundOther: "{player}が飛行を無効にしたため、{price}が返金されました。"
-  insufficient: "&cお金が足りません！飛行には{price}が必要です！"
+  insufficient: "&cお金が足りません！ 飛行には{price}が必要です！"
 
 help:
   fly: "飛行の&a有効&r/&c無効&rを切り替えます。"

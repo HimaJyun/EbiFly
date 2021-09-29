@@ -20,6 +20,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
@@ -72,9 +73,15 @@ public class PluginMain extends JavaPlugin {
             checker = ignore -> {};
         }
 
+        // スレッド
+        var executor = Executors.newSingleThreadScheduledExecutor();
+        executor.submit(() -> Thread.currentThread().setName("ebifly-timer"));
+        destructor.addFirst(executor::shutdown);
+
         // リポジトリ
         var economy = config.economy == null ? null : new VaultEconomy(config);
-        var repository = new FlyRepository(config, economy);
+        var repository = new FlyRepository(config, message, executor, economy,
+            r -> getServer().getScheduler().runTask(this, r));
         instance.setInstance(repository);
         destructor.addFirst(() -> instance.setInstance(null));
         // API登録(たぶん誰も使わない)

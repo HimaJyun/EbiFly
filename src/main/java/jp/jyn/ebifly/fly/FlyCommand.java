@@ -57,17 +57,17 @@ public class FlyCommand implements TabExecutor {
             this.price = config.economy.price;
             this.refundType = config.economy.refund;
 
-            this.noticeEnablePaid = config.noticeEnable.marge(config.noticePayment);
+            this.noticeEnablePaid = config.noticeEnable.merge(config.noticePayment);
         } else {
             this.price = 0;
             this.refundType = null;
 
-            this.noticeEnablePaid = config.noticeEnable.marge();
+            this.noticeEnablePaid = config.noticeEnable.merge();
         }
 
-        noticeEnable = config.noticeEnable.marge();
-        noticeDisable = config.noticeDisable.marge();
-        noticePayment = config.noticePayment.marge();
+        noticeEnable = config.noticeEnable.merge();
+        noticeDisable = config.noticeDisable.merge();
+        noticePayment = config.noticePayment.merge();
         // TODO: 権限チェック
     }
 

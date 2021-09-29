@@ -29,9 +29,9 @@ public class MessageConfig {
 
     public final ComponentParser flyEnable;
     public final ComponentParser flyDisable;
-    public final ComponentParser flyTimeout;
     public final ComponentParser flySend;
     public final ComponentParser flyReceive;
+    public final BiConsumer<Player, ComponentVariable> flyTimeout;
 
     public final PaymentMessage payment;
     public final HelpMessage help;
@@ -56,9 +56,12 @@ public class MessageConfig {
         flyDisable = p(s.apply("fly.disable"));
         flySend = p(s.apply("fly.send"));
         flyReceive = p(s.apply("fly.receive"));
-        flyTimeout = main.noticeTimeoutActionbar
-            ? ComponentParser.parse(s.apply("fly.timeout"))
-            : p(s.apply("fly.timeout"));
+        flyTimeout = !main.noticeTimeoutActionbar
+            ? c(s.apply("fly.timeout"))
+            : cc(s.apply("fly.timeout"), st -> {
+            var c = ComponentParser.parse(st);
+            return (p, v) -> c.apply(v).actionbar(p);
+        });
 
         payment = new PaymentMessage(main.economy != null
             ? Objects.requireNonNull(config.getConfigurationSection("payment"))
@@ -85,6 +88,22 @@ public class MessageConfig {
         return ComponentParser.parse(PREFIX + value);
     }
 
+    private static <T extends CommandSender> BiConsumer<T, ComponentVariable> c(String value) {
+        return cc(value, s -> {
+            var c = p(s);
+            return (p, v) -> c.apply(v).send(p);
+        });
+    }
+
+    private static <T extends CommandSender> BiConsumer<T, ComponentVariable> cc(
+        String value, Function<String, BiConsumer<T, ComponentVariable>> mapper) {
+        if (value == null || value.isEmpty()) {
+            return (p, v) -> {};
+        }
+
+        return mapper.apply(value);
+    }
+
     public final static class PaymentMessage {
         public final BiConsumer<Player, ComponentVariable> persist;
         public final BiConsumer<Player, ComponentVariable> persistP; // 常にプレフィックス持ち
@@ -99,11 +118,13 @@ public class MessageConfig {
             UnaryOperator<String> s = k -> config.getString(k, null);
             if (main.noticePaymentActionbar) {
                 var v = s.apply("persist");
-                persist = cc(v, ComponentParser::parse);
+                persist = cc(v, st -> {
+                    var c = ComponentParser.parse(st);
+                    return (p, va) -> c.apply(va).actionbar(p);
+                });
                 persistP = c(v);
             } else {
                 persist = persistP = c(s.apply("persist"));
-
             }
             self = c(s.apply("self"));
             other = c(s.apply("other"));
@@ -111,21 +132,6 @@ public class MessageConfig {
             refund = c(s.apply("refund"));
             refundOther = c(s.apply("refundOther"));
             insufficient = c(s.apply("insufficient"));
-        }
-
-        private static <T extends CommandSender> BiConsumer<T, ComponentVariable> c(String value) {
-            return cc(value, MessageConfig::p);
-        }
-
-        private static <T extends CommandSender> BiConsumer<T, ComponentVariable> cc(
-            String value, Function<String, ComponentParser> mapper
-        ) {
-            if (value == null || value.isEmpty()) {
-                return (p, v) -> {};
-            }
-
-            var c = mapper.apply(value);
-            return (p, v) -> c.apply(v).send(p);
         }
     }
 
