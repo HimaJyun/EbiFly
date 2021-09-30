@@ -8,6 +8,7 @@ import jp.jyn.jbukkitlib.config.locale.BukkitLocale;
 import jp.jyn.jbukkitlib.config.parser.component.ComponentVariable;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
@@ -68,7 +69,6 @@ public class FlyCommand implements TabExecutor {
         noticeEnable = config.noticeEnable.merge();
         noticeDisable = config.noticeDisable.merge();
         noticePayment = config.noticePayment.merge();
-        // TODO: 権限チェック
     }
 
     private boolean isEconomyEnable() {
@@ -167,26 +167,28 @@ public class FlyCommand implements TabExecutor {
 
     private void persistFly(Player player) {
         var l = message.get(player);
+
+        double price;
+        OfflinePlayer payer;
         if (isEconomyEnable()) {
-            var v = ComponentVariable.init().put("price", () -> economy.format(price));
-            if (!economy.withdraw(player, price)) {
+            var v = ComponentVariable.init().put("price", () -> economy.format(this.price));
+            if (!economy.withdraw(player, this.price)) {
                 l.payment.insufficient.accept(player, v);
                 return;
             }
 
             l.payment.persistP.accept(player, v);
-            fly.addCredit(player, price, 1, player);
+            price = this.price;
+            payer = player;
         } else {
-            fly.addCredit(player, 1);
+            price = 0;
+            payer = null;
         }
 
-        if (!fly.persist(player)) {
-            // エラー、普通はないはず。
-            throw new IllegalStateException("persist failed, thread conflict?");
+        if (fly.addCredit(player, price, 1, payer, true)) {
+            noticeEnablePaid.accept(player.getEyeLocation());
+            l.flyEnable.apply().send(player);
         }
-
-        noticeEnablePaid.accept(player.getEyeLocation());
-        l.flyEnable.apply().send(player);
     }
 
     private void addCredit(CommandSender sender, Player recipient, int minute) {
@@ -218,7 +220,7 @@ public class FlyCommand implements TabExecutor {
             var v = ComponentVariable.init().put("time", minute);
             v.put("player", recipient.getName());
             message.get(sender).flySend.apply(v).send(sender);
-            v.put("player", sender.getName()); // TODO: コンソールの時にどうなる？
+            v.put("player", sender.getName());
             message.get(recipient).flyReceive.apply(v).send(recipient);
         }
 

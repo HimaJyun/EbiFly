@@ -99,9 +99,10 @@ public class FlyRepository implements EbiFly {
             throw new IllegalStateException("Player doesn't flying, Thread conflict?"); // 絶妙なタイミングで飛行停止すると正常でも出るかも
         }
 
-        // 周期タイマーのはずなので特に気にせずクレジットを減らす
-        v.lastConsume.set(System.currentTimeMillis());
-        var cs = v.credit; // TODO: このpollして処理して戻すって処理は定型なので共通化できるのでは？
+        // 1分の周期タイマーのはずなので、1分進めて1クレジット使う
+        v.lastConsume.addAndGet(TimeUnit.MINUTES.toNanos(1));
+        var cs = v.credit;
+        boolean unpaid = true; // 踏み倒し防止(0で呼び出すと支払わずに踏み倒せる->踏み倒されそうになると倍徴収する)
         Credit credit;
         while ((credit = cs.pollFirst()) != null) {
             var i = credit.minute().decrementAndGet();
@@ -110,6 +111,7 @@ public class FlyRepository implements EbiFly {
                 return;
             } else if (i == 0) {
                 // 取り出したクレジットが空になったら次の支払いへ
+                unpaid = false; // 支払われたので倍額徴収は不要
                 break;
             }
             // 0を下回る == スレッド間競合で既に0だったのを更に減らしたっぽい
@@ -125,19 +127,24 @@ public class FlyRepository implements EbiFly {
             }
         }
 
+        // 踏み倒しはさせないぞ
+        if (unpaid) {
+            economy.withdraw(player, price); // 踏み倒されても1分が精一杯なので要らない処理のような気はする
+        }
+
         // どうやらないっぽい -> ｵｶﾈﾀﾞｰ!!
         if (economy.withdraw(player, price)) {
             // 支払い完了、ﾏｲﾄﾞｱﾘｰ
-            message.get(player).payment.persist.accept(player, ComponentVariable.init().put("price",
-                economy.format(price)));
+            message.get(player).payment.persist.accept(player,
+                ComponentVariable.init().put("price", () -> economy.format(price)));
             noticePayment.accept(player.getEyeLocation()); // TODO: 非同期呼び出し出来ないかも
             cs.addLast(new Credit(price, 1, player));
             return;
         }
 
         // お金ないならｵﾁﾛｰ!
-        message.get(player).payment.insufficient.accept(player, ComponentVariable.init().put("price",
-            economy.format(price)));
+        message.get(player).payment.insufficient.accept(player,
+            ComponentVariable.init().put("price", () -> economy.format(price)));
         remove(player, true);
     }
 
@@ -146,32 +153,16 @@ public class FlyRepository implements EbiFly {
         if (v == null) {
             throw new IllegalStateException("Player doesn't flying, Thread conflict?");
         }
-
         // 後の簡略化のためにクレジットを消費させる
-        long time, use;
-        while (true) { // TODO: これを関数で切り出す。-1ならクレジット切れ、+nなら未徴収分のミリ秒(それか時間そのもの？)。みたいな？
-            long old = v.lastConsume.get();
-            time = System.currentTimeMillis() - old; // 経過時間
-            use = TimeUnit.MILLISECONDS.toMinutes(time);
-            if (v.lastConsume.compareAndSet(old, old + TimeUnit.MINUTES.toMillis(use))) { // 消費した分だけ進めておく
-                break;
-            }
-        }
-        //TimeUnit.MILLISECONDS.toMinutes(time); TODO: TimeUnitを使う
-        useCredit(v.credit, (int) use);
+        v.useCredit();
 
         // クレジット残数チェック
-        int c = v.credit.stream().mapToInt(m -> Math.max(m.minute().get(), 0)).sum();
-
-        // 後からクレジットが追加されてる
-        if (c > 1) {
-            // 警告タイマーの入れ直し
-            // TODO: CASの段階でメモリに取っておく方が良いか？
-            // TODO: これやってること再スケジュールと同じ
-            long delay = TimeUnit.MINUTES.toMillis(c) + v.lastConsume.get(); // (残クレジット*60*1000)+最終徴収時刻 == 終了予定時刻
-            delay -= System.currentTimeMillis(); // 終了予定時刻 - 現時刻 == 終了予定までの時間
-            delay -= this.notify;
-            v.setTimer(executor.schedule(() -> stopTimer(player, isNotifyEnabled()), delay, TimeUnit.MILLISECONDS));
+        int c = v.countAllCredits();
+        if (c > 1) { // 後からクレジットが追加されてる -> 警告タイマーの入れ直し
+            long delay = TimeUnit.MINUTES.toNanos(c); // 総飛行時間
+            delay -= v.getElapsed(); // 既に飛行してる分を引く
+            delay -= TimeUnit.SECONDS.toNanos(this.notify);
+            v.setTimer(executor.schedule(() -> stopTimer(player, isNotifyEnabled()), delay, TimeUnit.NANOSECONDS));
         } else if (notify) { // 停止タイマー入れ直す
             v.setTimer(executor.schedule(() -> stopTimer(player, false), this.notify, TimeUnit.SECONDS));
             noticeTimeout.accept(player.getEyeLocation());
@@ -189,49 +180,84 @@ public class FlyRepository implements EbiFly {
     }
 
     @Override
-    public boolean persist(Player player) {
+    public boolean isPersist(Player player) {
         var v = flying.get(player.getUniqueId());
-        if (v == null || v.credit.isEmpty()) {
-            // 飛んでないか、なぜかクレジットがない
+        return v != null && v.persist;
+    }
+
+    @Override
+    public boolean persist(Player player, boolean enable) {
+        var v = flying.get(player.getUniqueId());
+        if (v == null || v.persist == enable) {
+            // 飛んでない || 既に指定されたモード
             return false;
         }
 
-        // タイマー変更
-        v.reSchedule(delay -> executor.scheduleAtFixedRate(() -> persistTimer(player),
-            delay, TimeUnit.MINUTES.toMillis(1), TimeUnit.MILLISECONDS));
-        v.persist = true;
+        // タイマー入れ替え
+        if (enable) {
+            // 使ったクレジット減らしておく(persistTimerは1分ごとに徴収するので、既に使われている分を徴収せずにタイマーを切り替えると未徴収分だけ飛行時間が伸びる)
+            final long MINUTE_NANOS = TimeUnit.MINUTES.toNanos(1);
+            var delay = Math.max(MINUTE_NANOS - v.useCredit(), 0); // 次にクレジットを減らすタイミング(分区切りのタイミングになる時間)
+            v.setTimer(executor.scheduleAtFixedRate(() -> persistTimer(player),
+                delay, MINUTE_NANOS, TimeUnit.NANOSECONDS));
+            /*v.reSchedule(delay -> executor.scheduleAtFixedRate(() -> persistTimer(player),
+                delay % TimeUnit.MINUTES.toNanos(1), TimeUnit.MINUTES.toNanos(1), TimeUnit.NANOSECONDS));*/
+            // 30秒経過後に切り替え -> 30秒後に支払い、1分周期
+            // 1分30秒経過後に切り替え -> 1クレジット(1分)を消費して30秒後に支払い、1分周期
+        } else {
+            v.reSchedule(delay -> executor.schedule(() -> stopTimer(player, isNotifyEnabled()),
+                delay - TimeUnit.SECONDS.toNanos(notify), TimeUnit.NANOSECONDS));
+        }
+        v.persist = enable;
         return true;
     }
 
     @Override
-    public boolean addCredit(Player player, double price, int minute, OfflinePlayer payer) {
-        var v = flying.get(player.getUniqueId());
-        var r = v == null;
-        if (r) {
-            v = flying.computeIfAbsent(player.getUniqueId(), u -> new FlightStatus());
-        }
+    public boolean addCredit(Player player, double price, int minute, OfflinePlayer payer, boolean persist) {
+        var v = flying.computeIfAbsent(player.getUniqueId(), u -> new FlightStatus());
         v.credit.addLast(new Credit(price, minute, payer));
         player.setAllowFlight(true);
 
-        // 停止タイマー入れ直し
-        v.reSchedule(delay -> executor.schedule(
-            () -> stopTimer(player, isNotifyEnabled()),
-            delay + TimeUnit.MINUTES.toMillis(minute) - TimeUnit.SECONDS.toMillis(notify),
-            TimeUnit.MILLISECONDS
-        ));
-        return r;
+        if (v.isTimerInitialized()) {
+            // タイマーが動いてる -> 非persistの時だけタイマー入れ直す (persistはどのみち周期タイマーで消えていくので)
+            if (!v.persist) {
+                v.reSchedule(delay -> executor.schedule(() -> stopTimer(player, isNotifyEnabled()),
+                    delay - TimeUnit.SECONDS.toNanos(notify), TimeUnit.NANOSECONDS));
+            }
+            return false;
+        } else {
+            // タイマーが動いてない -> 必要なタイマーを入れる
+            if (persist) {
+                v.setTimer(executor.schedule(() -> persistTimer(player), 1, TimeUnit.MINUTES));
+            } else {
+                v.setTimer(executor.schedule(() -> stopTimer(player, isNotifyEnabled()),
+                    TimeUnit.MINUTES.toSeconds(minute) - this.notify, TimeUnit.SECONDS));
+            }
+            return true;
+        }
     }
 
     // 飛んでなければ-1、十分なら0、不足していたら足りない数
     @Override
-    public int useCredit(Player player, int minute) {
+    public int useCredit(Player player, int minute, boolean notice) {
         var v = flying.get(player.getUniqueId());
         if (v == null) {
             return -1;
         }
 
-        v.lastConsume.set(System.currentTimeMillis());
-        return useCredit(v.credit, minute);
+        int i = v.useCredit(minute);
+        if (i == 0) {
+            v.lastConsume.addAndGet(TimeUnit.MINUTES.toNanos(minute));
+            return 0;
+        } else if (i < 0) {
+            throw new IllegalStateException("useCredit(int) return less 0");
+        }
+
+        // 足りない分戻す
+        v.lastConsume.addAndGet(-TimeUnit.MINUTES.toNanos(i));
+        // もう飛べないので落とす
+        remove(player, notice);
+        return i;
     }
 
     @Override
@@ -241,73 +267,34 @@ public class FlyRepository implements EbiFly {
             return Collections.emptyMap();
         }
 
-        long time = v.getElapsed(); // 経過時間
-        long min = TimeUnit.MILLISECONDS.toMinutes(time); // 消費クレジット
-        long sec = time % (60 * 1000); // 消費秒(ミリ単位) TODO: これ、moduloを先にやってからなら減算1発で済むのでは？
-
         // クレジット消費
-        var d = v.credit;
-        useCredit(d, (int) min);
-        if (d.isEmpty()) {
+        long nano = v.useCredit(); // 未徴収分
+        if (v.credit.isEmpty()) {
             return Collections.emptyMap();
         }
 
         // 秒割料金
         Credit c;
         int remain;
-        while (true) {
-            c = d.pollFirst();
-            if (c == null) {
-                return Collections.emptyMap(); // TODO: returnして大丈夫？
+        do {
+            if ((c = v.credit.pollFirst()) == null) {
+                return Collections.emptyMap(); // クレジットないならこの先の処理は全て無駄なのでreturn
             }
-            if (c.payer() == null) {
-                continue;
-            }
-            remain = c.minute().get();
-            if (remain > 0) { // 空クレジットでなければ抜ける(==空なら捨ててやり直し)
-                break;
-            }
-        }
-        long rs = (60 * 1000) - sec; // 残秒
-        // (単価/単位==秒単価)*残秒 == 返金額。除算を後回しにすることで浮動小数の演算誤差を減らすことを意図した
-        double refund = (c.price() * rs) / (60d * 1000d);
-        refund += c.price() * (remain - 1); // クレジット残ってるならそれも入れとく
+        } while (c.payer() == null || (remain = c.minute().get()) <= 0); // 空クレジットなら捨ててやり直し
+        double refund = c.price() * remain; // 返金額
+        // (単価/単位=ナノ秒単価)*経過時間 == ナノ秒単位消費金額。除算を後回しにすることで浮動小数の演算誤差を減らすことを意図した
+        refund -= (c.price() * nano) / ((double) TimeUnit.MINUTES.toNanos(1));
 
         Map<OfflinePlayer, Double> ret = new HashMap<>();
         ret.put(c.payer(), refund);
-
         // 残クレジットまとめて入れる
-        while (!d.isEmpty()) {
-            var cc = d.remove();
-            if (cc.payer() != null) {
-                ret.merge(cc.payer(), cc.price(), Double::sum);
+        while ((c = v.credit.pollFirst()) != null) {
+            if (c.payer() != null) {
+                ret.merge(c.payer(), c.price(), Double::sum);
             }
         }
 
         return ret;
-    }
-
-    private int useCredit(Deque<Credit> credits, int minute) {
-        Credit credit;
-        OUTER:
-        while (minute != 0 && (credit = credits.pollFirst()) != null) {
-            int old, use, remain;
-            do {
-                old = credit.minute().get();
-                if (old <= 0) { // そもそもが空クレジットなら何をしても無駄
-                    continue OUTER;
-                }
-                use = Math.min(old, minute);
-                remain = old - use;
-            } while (!credit.minute().compareAndSet(old, remain));
-
-            // 消費して戻す
-            minute -= use;
-            if (remain > 0) {
-                credits.addFirst(credit);
-            }
-        }
-        return minute;
     }
 
     private static final class FlightStatus {
@@ -324,13 +311,11 @@ public class FlyRepository implements EbiFly {
         }
 
         private FlightStatus() {
-            this(new AtomicLong(System.currentTimeMillis()), new ConcurrentLinkedDeque<>());
+            this(new AtomicLong(System.nanoTime()), new ConcurrentLinkedDeque<>());
         }
 
         private long getElapsed() {
-            return System.currentTimeMillis() - lastConsume.get();
-            // TODO: millisじゃなくてnanoTimeにした方が良い、経過時間の計算なので(NTPでズレない)
-            // t1 < t0ではなくt1 - t0 < 0を使用すべきですが、それは、数値のオーバーフローが発生する可能性があるからです。
+            return System.nanoTime() - lastConsume.get();
         }
 
         private void cancelTimer() {
@@ -350,17 +335,68 @@ public class FlyRepository implements EbiFly {
             }
         }
 
+        private boolean isTimerInitialized() {
+            synchronized (lock) {
+                return timer != null;
+            }
+        }
+
         private void reSchedule(LongFunction<Future<?>> scheduler) {
             long last, delay;
             do {
                 last = lastConsume.get();
                 // クレジット全数での飛行時間を取得
-                delay = TimeUnit.MINUTES.toMillis(credit.stream().mapToInt(m -> Math.max(m.minute.get(), 0)).sum());
+                delay = TimeUnit.MINUTES.toMillis(countAllCredits());
                 // 経過時間分引く
-                delay -= System.currentTimeMillis() - last;
-            } while (last != lastConsume.get()); // Compare And Loop TODO: こんな慎重なカウント処理要る？
+                delay -= System.nanoTime() - last;
+            } while (last != lastConsume.get()); // Compare And Loop
             // ScheduledFuture#getDelayを使う方法だとnotifyの時間分ずつズレるのでこうする
             setTimer(scheduler.apply(delay));
+        }
+
+        private int countAllCredits() {
+            return credit.stream().mapToInt(m -> Math.max(m.minute().get(), 0)).sum();
+        }
+
+        private long useCredit() {
+            while (true) {
+                long old = lastConsume.get();
+                long elapsed = System.nanoTime() - old;
+                long use = TimeUnit.NANOSECONDS.toMinutes(elapsed); // 既に消費されてるべきクレジット数
+                long n = TimeUnit.MINUTES.toNanos(use); // 消費された時間
+                if (lastConsume.compareAndSet(old, old + n)) { // 消費した分だけ進めておく
+                    var i = useCredit((int) use);
+                    if (i > 0) {
+                        // 未回収分があれば戻す
+                        lastConsume.addAndGet(-TimeUnit.MINUTES.toNanos(i));
+                    }
+                    return elapsed - n; // 経過時間 - 消費分 = 未徴収分
+                    // 未回収分があると計算が狂うが、ここで欲しいのは端数なので気にしない (elapsed % TimeUnit.MINUTES.toNanos(1)を減算で書き換えてるだけ)
+                }
+            }
+        }
+
+        private int useCredit(int quantity) {
+            Credit c;
+            OUTER:
+            while (quantity > 0 && (c = credit.pollFirst()) != null) {
+                int old, use, remain;
+                do {
+                    old = c.minute().get();
+                    if (old <= 0) { // 空クレジットが入ってたら捨てて次へ
+                        continue OUTER;
+                    }
+                    use = Math.min(old, quantity);
+                    remain = old - use;
+                } while (!c.minute().compareAndSet(old, remain));
+
+                // 消費して戻す
+                quantity -= use;
+                if (remain > 0) {
+                    credit.addFirst(c);
+                }
+            }
+            return quantity;
         }
     }
 

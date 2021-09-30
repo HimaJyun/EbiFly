@@ -26,8 +26,23 @@ final class FlyDelegate implements EbiFly {
     }
 
     @Override
+    public boolean isPersist(Player player) {
+        return instance.isPersist(player);
+    }
+
+    @Override
+    public boolean persist(Player player, boolean enable) {
+        return instance.persist(player, enable);
+    }
+
+    @Override
     public boolean persist(Player player) {
         return instance.persist(player);
+    }
+
+    @Override
+    public boolean addCredit(Player player, double price, int minute, OfflinePlayer payer, boolean persist) {
+        return instance.addCredit(player, price, minute, payer, persist);
     }
 
     @Override
@@ -41,12 +56,27 @@ final class FlyDelegate implements EbiFly {
     }
 
     @Override
+    public boolean addCredit(Player player, int minute, boolean persist) {
+        return instance.addCredit(player, minute, persist);
+    }
+
+    @Override
+    public int useCredit(Player player, int minute, boolean notice) {
+        return instance.useCredit(player, minute, notice);
+    }
+
+    @Override
     public int useCredit(Player player, int minute) {
         return instance.useCredit(player, minute);
     }
 
     @Override
-    public boolean useCredit(Player player) {
+    public int useCredit(Player player, boolean notice) {
+        return instance.useCredit(player, notice);
+    }
+
+    @Override
+    public int useCredit(Player player) {
         return instance.useCredit(player);
     }
 
@@ -64,7 +94,22 @@ final class FlyDelegate implements EbiFly {
         }
 
         @Override
+        public boolean isPersist(Player player) {
+            throw new UnsupportedOperationException("EbiFly is not initialized");
+        }
+
+        @Override
+        public boolean persist(Player player, boolean enable) {
+            throw new UnsupportedOperationException("EbiFly is not initialized");
+        }
+
+        @Override
         public boolean persist(Player player) {
+            throw new UnsupportedOperationException("EbiFly is not initialized");
+        }
+
+        @Override
+        public boolean addCredit(Player player, double price, int minute, OfflinePlayer payer, boolean persist) {
             throw new UnsupportedOperationException("EbiFly is not initialized");
         }
 
@@ -79,12 +124,27 @@ final class FlyDelegate implements EbiFly {
         }
 
         @Override
+        public boolean addCredit(Player player, int minute, boolean persist) {
+            throw new UnsupportedOperationException("EbiFly is not initialized");
+        }
+
+        @Override
+        public int useCredit(Player player, int minute, boolean notice) {
+            throw new UnsupportedOperationException("EbiFly is not initialized");
+        }
+
+        @Override
         public int useCredit(Player player, int minute) {
             throw new UnsupportedOperationException("EbiFly is not initialized");
         }
 
         @Override
-        public boolean useCredit(Player player) {
+        public int useCredit(Player player, boolean notice) {
+            throw new UnsupportedOperationException("EbiFly is not initialized");
+        }
+
+        @Override
+        public int useCredit(Player player) {
             throw new UnsupportedOperationException("EbiFly is not initialized");
         }
 
