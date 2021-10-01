@@ -38,7 +38,7 @@ public class PluginMain extends JavaPlugin {
         }
 
         // 設定ロード
-        var config = new MainConfig(this); // TODO: 各インスタンスはconfigを持たないようにして要らない値をGCに捨てさせるべき
+        var config = new MainConfig(this);
         BukkitLocale<MessageConfig> message;
         YamlLoader.copyDir(this, "locale");
         if (config.localeEnable) {
@@ -57,7 +57,7 @@ public class PluginMain extends JavaPlugin {
             var v = new VersionChecker(this);
             checker = v::check;
 
-            // 定期確認
+            // 起動時確認
             var task = getServer().getScheduler().runTaskLaterAsynchronously(
                 this,
                 () -> v.check(Bukkit.getConsoleSender()),

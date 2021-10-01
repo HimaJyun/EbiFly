@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @PackagePrivate
 class VersionChecker {
-    private final static long CHECK_PERIOD = TimeUnit.HOURS.toMillis(12); // 決め打ち
+    private final static long CHECK_PERIOD = TimeUnit.HOURS.toNanos(12); // 決め打ち
 
     private final UpdateChecker checker = new GitHubReleaseChecker("HimaJyun", "EbiFly");
     private final AtomicLong lastChecked = new AtomicLong(0);
@@ -33,7 +33,7 @@ class VersionChecker {
 
     @PackagePrivate
     void check(CommandSender recipient) {
-        if ((System.currentTimeMillis() - lastChecked.get()) < CHECK_PERIOD) {
+        if ((System.nanoTime() - lastChecked.get()) < CHECK_PERIOD) {
             var c = cache.get();
             if (c != null) {
                 recipient.sendMessage(c);
@@ -57,7 +57,7 @@ class VersionChecker {
                 "%sDownload: %s".formatted(MessageConfig.PREFIX, latest.url)
             };
             cache.set(n);
-            lastChecked.set(System.currentTimeMillis());
+            lastChecked.set(System.nanoTime());
             recipient.sendMessage(n);
         });
     }
