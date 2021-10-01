@@ -8,6 +8,7 @@ fly:
   timeout: "&cあと&r{time}秒&cで飛行が終了します！"
   send: "{player}に{time}分間の飛行クレジットを与えました！"
   receive: "{player}から{time}分間の飛行クレジットを受け取りました！"
+  creative: "クリエイティブモードでは使用できません！"
 
 payment:
   persist: "飛行のために{price}を支払いました！"

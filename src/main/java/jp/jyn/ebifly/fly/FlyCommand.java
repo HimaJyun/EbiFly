@@ -167,10 +167,21 @@ public class FlyCommand implements TabExecutor {
 
     private void persistFly(Player player) {
         var l = message.get(player);
+        if (!player.hasPermission("ebifly.fly")) {
+            l.permissionError.apply().send(player);
+            return;
+        }
+        switch (player.getGameMode()) { // クリエでは飛ばさない
+            case CREATIVE, SPECTATOR -> {
+                l.flyCreative.apply().send(player);
+                return;
+            }
+        }
 
         double price;
         OfflinePlayer payer;
-        if (isEconomyEnable()) {
+        Consumer<Location> notice;
+        if (isEconomyEnable() && !player.hasPermission("ebifly.free")) {
             var v = ComponentVariable.init().put("price", () -> economy.format(this.price));
             if (!economy.withdraw(player, this.price)) {
                 l.payment.insufficient.accept(player, v);
@@ -180,23 +191,35 @@ public class FlyCommand implements TabExecutor {
             l.payment.persistP.accept(player, v);
             price = this.price;
             payer = player;
+            notice = noticeEnablePaid;
         } else {
             price = 0;
             payer = null;
+            notice = noticeEnable;
         }
 
         if (fly.addCredit(player, price, 1, payer, true)) {
-            noticeEnablePaid.accept(player.getEyeLocation());
+            notice.accept(player.getEyeLocation());
             l.flyEnable.apply().send(player);
         }
     }
 
     private void addCredit(CommandSender sender, Player recipient, int minute) {
         boolean self = sender.equals(recipient);
+        if (!sender.hasPermission(self ? "ebifly.fly" : "ebifly.other")) {
+            message.get(sender).permissionError.apply().send(sender);
+            return;
+        }
+        switch (recipient.getGameMode()) {
+            case CREATIVE, SPECTATOR -> {
+                message.get(sender).flyCreative.apply().send(sender);
+                return;
+            }
+        }
+
         Player payer = sender instanceof Player p ? p : null;
         var p = price;
-
-        if (isEconomyEnable() && payer != null) {
+        if (isEconomyEnable() && payer != null && !payer.hasPermission("ebifly.free")) {
             var l = message.get(payer).payment;
             var v = ComponentVariable.init().put("price", economy.format(p * minute));
             if (!economy.withdraw(payer, p * minute)) {
@@ -220,7 +243,7 @@ public class FlyCommand implements TabExecutor {
             var v = ComponentVariable.init().put("time", minute);
             v.put("player", recipient.getName());
             message.get(sender).flySend.apply(v).send(sender);
-            v.put("player", sender.getName());
+            v.put("player", sender.getName()); // Consoleの時はCONSOLEになる
             message.get(recipient).flyReceive.apply(v).send(recipient);
         }
 

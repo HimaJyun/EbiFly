@@ -8,6 +8,7 @@ fly:
   timeout: "&cFlight will end in &r{time} seconds&c!"
   send: "Send {time} credits to {player}!"
   receive: "Receive {time} credits from {player}!"
+  creative: "Can't use in creative mode!"
 
 payment:
   persist: "You paid {price} for flight!"

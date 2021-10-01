@@ -127,25 +127,45 @@ public class FlyRepository implements EbiFly {
             }
         }
 
-        // 踏み倒しはさせないぞ
-        if (unpaid) {
-            economy.withdraw(player, price); // 踏み倒されても1分が精一杯なので要らない処理のような気はする
-        }
-
-        // どうやらないっぽい -> ｵｶﾈﾀﾞｰ!!
-        if (economy.withdraw(player, price)) {
-            // 支払い完了、ﾏｲﾄﾞｱﾘｰ
-            message.get(player).payment.persist.accept(player,
-                ComponentVariable.init().put("price", () -> economy.format(price)));
-            noticePayment.accept(player.getEyeLocation()); // TODO: 非同期呼び出し出来ないかも
-            cs.addLast(new Credit(price, 1, player));
+        // 支払いが無効になってるなら何もせずにaddできる
+        var c = new Credit(price, 1, player);
+        if (economy == null) {
+            cs.addLast(c);
             return;
         }
 
-        // お金ないならｵﾁﾛｰ!
-        message.get(player).payment.insufficient.accept(player,
-            ComponentVariable.init().put("price", () -> economy.format(price)));
-        remove(player, true);
+        // ↓がスレッド対応してなさそうなのでメインスレッドに切り替える
+        // Vault -> Vaultから先のプラグインがスレッドサポートしてるか分からない
+        // パーティクル表示 -> net.minecraft.server.level.WorldServer#sendParticlesがArrayListをイテレーションしてる
+        // hasPermission -> org.bukkit.permissions.PermissibleBaseでHashMapを使っている
+
+        // 先にスレッド側で色々作っておく
+        var b = unpaid;
+        var m = message.get(player).payment;
+        var cv = ComponentVariable.init().put("price", () -> economy.format(price));
+        syncCall.accept(() -> {
+            if (player.hasPermission("ebifly.free")) {
+                cs.addLast(c);
+                return;
+            }
+
+            // 踏み倒しはさせないぞ
+            if (b) {
+                economy.withdraw(player, price); // 踏み倒されても1分が精一杯なので要らない処理のような気はする
+            }
+
+            // クレジット切れてる -> ｵｶﾈﾀﾞｰ!!
+            if (economy.withdraw(player, price)) {
+                // 支払い完了、ﾏｲﾄﾞｱﾘｰ
+                m.persist.accept(player, cv);
+                noticePayment.accept(player.getEyeLocation());
+                cs.addLast(new Credit(price, 1, player));
+            } else {
+                // お金ないならｵﾁﾛｰ!
+                m.insufficient.accept(player, cv);
+                remove(player, true);
+            }
+        });
     }
 
     private void stopTimer(Player player, boolean notify) {
@@ -164,10 +184,15 @@ public class FlyRepository implements EbiFly {
             delay -= TimeUnit.SECONDS.toNanos(this.notify);
             v.setTimer(executor.schedule(() -> stopTimer(player, isNotifyEnabled()), delay, TimeUnit.NANOSECONDS));
         } else if (notify) { // 停止タイマー入れ直す
-            v.setTimer(executor.schedule(() -> stopTimer(player, false), this.notify, TimeUnit.SECONDS));
-            noticeTimeout.accept(player.getEyeLocation());
-            message.get(player).flyTimeout.accept(player, ComponentVariable.init().put("time", this.notify));
+            // パーティクル表示があるのでメインスレッドで
+            var m = message.get(player).flyTimeout;
+            var cv = ComponentVariable.init().put("time", this.notify);
             // ↑ その気になれば事前にapplyしておける
+            syncCall.accept(() -> {
+                noticeTimeout.accept(player.getEyeLocation());
+                m.accept(player, cv);
+            });
+            v.setTimer(executor.schedule(() -> stopTimer(player, false), this.notify, TimeUnit.SECONDS));
         } else { // 停止
             // ズレが大きければコッソリ待つ的な処理があった方が良いかも？ ScheduledExecutorServiceの精度次第
             remove(player, true);
@@ -200,8 +225,6 @@ public class FlyRepository implements EbiFly {
             var delay = Math.max(MINUTE_NANOS - v.useCredit(), 0); // 次にクレジットを減らすタイミング(分区切りのタイミングになる時間)
             v.setTimer(executor.scheduleAtFixedRate(() -> persistTimer(player),
                 delay, MINUTE_NANOS, TimeUnit.NANOSECONDS));
-            /*v.reSchedule(delay -> executor.scheduleAtFixedRate(() -> persistTimer(player),
-                delay % TimeUnit.MINUTES.toNanos(1), TimeUnit.MINUTES.toNanos(1), TimeUnit.NANOSECONDS));*/
             // 30秒経過後に切り替え -> 30秒後に支払い、1分周期
             // 1分30秒経過後に切り替え -> 1クレジット(1分)を消費して30秒後に支払い、1分周期
         } else {
@@ -216,7 +239,11 @@ public class FlyRepository implements EbiFly {
     public boolean addCredit(Player player, double price, int minute, OfflinePlayer payer, boolean persist) {
         var v = flying.computeIfAbsent(player.getUniqueId(), u -> new FlightStatus());
         v.credit.addLast(new Credit(price, minute, payer));
-        player.setAllowFlight(true);
+        if (Bukkit.isPrimaryThread()) {
+            player.setAllowFlight(true);
+        } else {
+            syncCall.accept(() -> player.setAllowFlight(true));
+        }
 
         if (v.isTimerInitialized()) {
             // タイマーが動いてる -> 非persistの時だけタイマー入れ直す (persistはどのみち周期タイマーで消えていくので)
@@ -228,7 +255,7 @@ public class FlyRepository implements EbiFly {
         } else {
             // タイマーが動いてない -> 必要なタイマーを入れる
             if (persist) {
-                v.setTimer(executor.schedule(() -> persistTimer(player), 1, TimeUnit.MINUTES));
+                v.setTimer(executor.scheduleAtFixedRate(() -> persistTimer(player), 1, 1, TimeUnit.MINUTES));
             } else {
                 v.setTimer(executor.schedule(() -> stopTimer(player, isNotifyEnabled()),
                     TimeUnit.MINUTES.toSeconds(minute) - this.notify, TimeUnit.SECONDS));
@@ -290,7 +317,7 @@ public class FlyRepository implements EbiFly {
         // 残クレジットまとめて入れる
         while ((c = v.credit.pollFirst()) != null) {
             if (c.payer() != null) {
-                ret.merge(c.payer(), c.price(), Double::sum);
+                ret.merge(c.payer(), c.price() * c.minute().get(), Double::sum);
             }
         }
 

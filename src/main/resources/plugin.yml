@@ -13,11 +13,9 @@ commands:
     aliases: [ "ebifly" ]
 
 permissions:
-  ebifly.fly: # 自分から飛べるか
+  ebifly.fly:
     default: true
-  ebifly.other: # 他人に施せるか
-    default: true
-  ebifly.receive: # TODO: 他人から受け取れるか
+  ebifly.other:
     default: true
   ebifly.free:
     default: op
