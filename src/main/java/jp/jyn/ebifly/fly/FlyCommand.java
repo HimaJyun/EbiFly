@@ -1,6 +1,5 @@
 package jp.jyn.ebifly.fly;
 
-import jp.jyn.ebifly.EbiFly;
 import jp.jyn.ebifly.PluginMain;
 import jp.jyn.ebifly.config.MainConfig;
 import jp.jyn.ebifly.config.MessageConfig;
@@ -14,19 +13,19 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.PluginDescriptionFile;
+import org.bukkit.potion.PotionEffectType;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public class FlyCommand implements TabExecutor {
     private final BukkitLocale<MessageConfig> message;
-    private final EbiFly fly;
+    private final FlyRepository fly;
     private final VaultEconomy economy;
 
     private final Consumer<CommandSender> checker;
@@ -35,15 +34,13 @@ public class FlyCommand implements TabExecutor {
     private final PluginDescriptionFile description;
 
     private final double price;
-    private final MainConfig.EconomyConfig.RefundType refundType;
-
+    private final Boolean restrictLevitation;
     private final Consumer<Location> noticeEnable;
-    private final Consumer<Location> noticeDisable;
     private final Consumer<Location> noticeEnablePaid;
     private final Consumer<Location> noticePayment;
 
     public FlyCommand(PluginMain plugin, MainConfig config, BukkitLocale<MessageConfig> message,
-                      EbiFly fly, VaultEconomy economy,
+                      FlyRepository fly, VaultEconomy economy,
                       Consumer<CommandSender> checker, BiConsumer<CommandSender, Consumer<CommandSender>> reload) {
         this.message = message;
         this.fly = fly;
@@ -54,20 +51,15 @@ public class FlyCommand implements TabExecutor {
 
         this.description = plugin.getDescription();
 
+        restrictLevitation = config.restrictLevitation;
         if (isEconomyEnable()) {
             this.price = config.economy.price;
-            this.refundType = config.economy.refund;
-
             this.noticeEnablePaid = config.noticeEnable.merge(config.noticePayment);
         } else {
             this.price = 0;
-            this.refundType = null;
-
             this.noticeEnablePaid = config.noticeEnable.merge();
         }
-
         noticeEnable = config.noticeEnable.merge();
-        noticeDisable = config.noticeDisable.merge();
         noticePayment = config.noticePayment.merge();
     }
 
@@ -87,7 +79,7 @@ public class FlyCommand implements TabExecutor {
         if (args.length == 0) {
             if (sender instanceof Player p) {
                 if (fly.isFlying(p)) {
-                    stop(p);
+                    fly.stopRefund(p);
                 } else {
                     persistFly(p);
                 }
@@ -138,49 +130,36 @@ public class FlyCommand implements TabExecutor {
         return true;
     }
 
-    private void stop(Player player) {
-        var refund = fly.stop(player);
-        message.get(player).flyDisable.apply().send(player);
-        noticeDisable.accept(player.getEyeLocation());
-        if (!isEconomyEnable() || refundType == MainConfig.EconomyConfig.RefundType.FALSE || refund.isEmpty()) {
-            return;
+    private boolean unavailable(CommandSender sender, Player recipient, String permission) {
+        if (!sender.hasPermission(permission)) {
+            message.get(sender).permissionError.apply().send(sender);
+            return true;
         }
-
-
-        if (refundType == MainConfig.EconomyConfig.RefundType.TRUE) {
-            refund = Map.of(player, refund.values().stream().mapToDouble(Double::doubleValue).sum());
-        }
-
-        var v = ComponentVariable.init();
-        for (var entry : refund.entrySet()) {
-            economy.deposit(entry.getKey(), entry.getValue());
-            var p = entry.getKey().getPlayer();
-            if (p != null) {
-                v.put("player", p::getName);
-                v.put("price", () -> economy.format(entry.getValue()));
-
-                var l = message.get(p).payment;
-                (p.equals(player) ? l.refund : l.refundOther).accept(p, v);
+        switch (recipient.getGameMode()) { // クリエでは飛ばさない
+            case CREATIVE, SPECTATOR -> {
+                message.get(sender).flyCreative.apply().send(sender);
+                return true;
             }
         }
+        if (restrictLevitation != null
+            && !recipient.hasPermission("ebifly.restrict.levitation")
+            && recipient.getPotionEffect(PotionEffectType.LEVITATION) != null) { // 浮遊中なら飛ばさない
+            message.get(sender).flyUnavailable.apply().send(sender);
+            return true;
+        }
+
+        return false;
     }
 
     private void persistFly(Player player) {
-        var l = message.get(player);
-        if (!player.hasPermission("ebifly.fly")) {
-            l.permissionError.apply().send(player);
+        if (unavailable(player, player, "ebifly.fly")) {
             return;
-        }
-        switch (player.getGameMode()) { // クリエでは飛ばさない
-            case CREATIVE, SPECTATOR -> {
-                l.flyCreative.apply().send(player);
-                return;
-            }
         }
 
         double price;
         OfflinePlayer payer;
         Consumer<Location> notice;
+        var l = message.get(player);
         if (isEconomyEnable() && !player.hasPermission("ebifly.free")) {
             var v = ComponentVariable.init().put("price", () -> economy.format(this.price));
             if (!economy.withdraw(player, this.price)) {
@@ -206,15 +185,8 @@ public class FlyCommand implements TabExecutor {
 
     private void addCredit(CommandSender sender, Player recipient, int minute) {
         boolean self = sender.equals(recipient);
-        if (!sender.hasPermission(self ? "ebifly.fly" : "ebifly.other")) {
-            message.get(sender).permissionError.apply().send(sender);
+        if (unavailable(sender, recipient, self ? "ebifly.fly" : "ebifly.other")) {
             return;
-        }
-        switch (recipient.getGameMode()) {
-            case CREATIVE, SPECTATOR -> {
-                message.get(sender).flyCreative.apply().send(sender);
-                return;
-            }
         }
 
         Player payer = sender instanceof Player p ? p : null;
@@ -241,10 +213,14 @@ public class FlyCommand implements TabExecutor {
             p = 0.0d;
 
             var v = ComponentVariable.init().put("time", minute);
-            v.put("player", recipient.getName());
-            message.get(sender).flySend.apply(v).send(sender);
-            v.put("player", sender.getName()); // Consoleの時はCONSOLEになる
-            message.get(recipient).flyReceive.apply(v).send(recipient);
+            if (self) {
+                message.get(sender).flyAdd.apply(v).send(sender);
+            } else {
+                v.put("player", recipient.getName());
+                message.get(sender).flySend.apply(v).send(sender);
+                v.put("player", sender.getName()); // Consoleの時はCONSOLEになる
+                message.get(recipient).flyReceive.apply(v).send(recipient);
+            }
         }
 
         // 経済無効、飛び始め -> 自分にenable

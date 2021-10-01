@@ -6,9 +6,11 @@ fly:
   enable: "飛行が&a有効&rになりました！"
   disable: "飛行が&c無効&rになりました！"
   timeout: "&cあと&r{time}秒&cで飛行が終了します！"
-  send: "{player}に{time}分間の飛行クレジットを与えました！"
-  receive: "{player}から{time}分間の飛行クレジットを受け取りました！"
+  add: "{time}分間の飛行時間を追加しました！"
+  send: "{player}に{time}分間の飛行時間を与えました！"
+  receive: "{player}から{time}分間の飛行時間を受け取りました！"
   creative: "クリエイティブモードでは使用できません！"
+  unavailable: "いまは使用できません！"
 
 payment:
   persist: "飛行のために{price}を支払いました！"
@@ -16,7 +18,7 @@ payment:
   other: "{player}を{time}分間飛行させるために{price}を支払いました！"
   receive: "{player}が{time}分間の飛行料金{price}を払ってくれました！"
   refund: "未使用の飛行料金{price}を返金しました！"
-  refundOther: "{player}が飛行を無効にしたため、{price}が返金されました。"
+  refundOther: "{player}の飛行が無効になったため、{price}が返金されました。"
   insufficient: "&cお金が足りません！ 飛行には{price}が必要です！"
 
 help:

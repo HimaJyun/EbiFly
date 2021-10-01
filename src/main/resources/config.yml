@@ -6,6 +6,19 @@ safety:
   limit: 0 # Safety protect limit. (unit: [d]ay/[h]our/[m]inute/[s]econd, 0 for unlimited)
   cleanup: 1d12h # Deleted after a specified period of time after logout. (unit: d/h/m/s, 0 for disabled)
 
+# If you need keep the game balance, restrict flight.
+# This setting enable/disable the permission check, restricts can also be set in detail with permissions.
+restrict:
+  respawn: true
+  world: true # World change
+  gamemode: true # GameMode change
+  # 'temporary' available for 'levitation' and 'water'.
+  # The flight will be re-enabled when the state is cleared.
+  levitation: temporary
+  # Due to Bukkit's limitations, this feature calls many events.
+  # Disable this feature if you need to keep the best performance. (This load is usually not an issue.)
+  water: false
+
 #disabling:
 #  levitation: false
 #  changeWorld: false
@@ -16,7 +29,6 @@ economy:
   price: 500 # per minute price
   server: "" # Server account (Name or UUID, UUID is better.)
   refund: true # true/false/payer (Hint: 'payer' is refund to payer)
-  async: false # If economy plugin have async support, change to 'true' for little better performance.
 
 notice:
   enable:

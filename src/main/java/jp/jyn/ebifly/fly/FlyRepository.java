@@ -33,8 +33,9 @@ public class FlyRepository implements EbiFly {
     private final VaultEconomy economy;
     private final Consumer<Runnable> syncCall;
 
-    private final double price;
     private final int notify;
+    private final double price;
+    private final Boolean refundType;
     private final Consumer<Location> noticeDisable;
     private final Consumer<Location> noticeTimeout;
     private final Consumer<Location> noticePayment;
@@ -47,8 +48,14 @@ public class FlyRepository implements EbiFly {
         this.economy = economy;
         this.syncCall = syncCall;
 
-        this.price = economy == null ? 0 : config.economy.price;
         this.notify = config.noticeTimeoutSecond;
+        if (economy == null) {
+            this.price = 0;
+            this.refundType = null;
+        } else {
+            this.price = config.economy.price;
+            this.refundType = config.economy.refund;
+        }
 
         this.noticeDisable = config.noticeDisable.merge();
         this.noticeTimeout = config.noticeTimeout.merge();
@@ -61,9 +68,10 @@ public class FlyRepository implements EbiFly {
 
     private FlightStatus remove(Player player, boolean notice) {
         var r = flying.remove(player.getUniqueId());
-        if (r != null) {
-            r.cancelTimer();
+        if (r == null) {
+            return null;
         }
+        r.cancelTimer();
 
         // 引数を使わない事でラムダのインスタンスが無駄に作られないように
         final Consumer<Player> f = p -> {
@@ -128,9 +136,8 @@ public class FlyRepository implements EbiFly {
         }
 
         // 支払いが無効になってるなら何もせずにaddできる
-        var c = new Credit(price, 1, player);
         if (economy == null) {
-            cs.addLast(c);
+            cs.addLast(new Credit(0, 1, null));
             return;
         }
 
@@ -144,8 +151,9 @@ public class FlyRepository implements EbiFly {
         var m = message.get(player).payment;
         var cv = ComponentVariable.init().put("price", () -> economy.format(price));
         syncCall.accept(() -> {
+            // 支払い不要
             if (player.hasPermission("ebifly.free")) {
-                cs.addLast(c);
+                cs.addLast(new Credit(0, 1, null));
                 return;
             }
 
@@ -290,38 +298,36 @@ public class FlyRepository implements EbiFly {
     @Override
     public Map<OfflinePlayer, Double> stop(Player player) {
         var v = remove(player, false);
-        if (v == null) {
-            return Collections.emptyMap();
+        return v == null ? Collections.emptyMap() : v.clearCredits();
+    }
+
+    public void stopRefund(Player player) {
+        var status = remove(player, true);
+        if (status == null || economy == null || refundType == null) {
+            return;
         }
 
-        // クレジット消費
-        long nano = v.useCredit(); // 未徴収分
-        if (v.credit.isEmpty()) {
-            return Collections.emptyMap();
+        var refund = status.clearCredits();
+        if (refund.isEmpty()) {
+            return;
         }
 
-        // 秒割料金
-        Credit c;
-        int remain;
-        do {
-            if ((c = v.credit.pollFirst()) == null) {
-                return Collections.emptyMap(); // クレジットないならこの先の処理は全て無駄なのでreturn
+        if (refundType) {
+            refund = Map.of(player, refund.values().stream().mapToDouble(Double::doubleValue).sum());
+        }
+
+        var v = ComponentVariable.init();
+        for (var entry : refund.entrySet()) {
+            economy.deposit(entry.getKey(), entry.getValue());
+            var p = entry.getKey().getPlayer();
+            if (p != null) {
+                v.put("player", p::getName);
+                v.put("price", () -> economy.format(entry.getValue()));
+
+                var l = message.get(p).payment;
+                (p.equals(player) ? l.refund : l.refundOther).accept(p, v);
             }
-        } while (c.payer() == null || (remain = c.minute().get()) <= 0); // 空クレジットなら捨ててやり直し
-        double refund = c.price() * remain; // 返金額
-        // (単価/単位=ナノ秒単価)*経過時間 == ナノ秒単位消費金額。除算を後回しにすることで浮動小数の演算誤差を減らすことを意図した
-        refund -= (c.price() * nano) / ((double) TimeUnit.MINUTES.toNanos(1));
-
-        Map<OfflinePlayer, Double> ret = new HashMap<>();
-        ret.put(c.payer(), refund);
-        // 残クレジットまとめて入れる
-        while ((c = v.credit.pollFirst()) != null) {
-            if (c.payer() != null) {
-                ret.merge(c.payer(), c.price() * c.minute().get(), Double::sum);
-            }
         }
-
-        return ret;
     }
 
     private static final class FlightStatus {
@@ -424,6 +430,38 @@ public class FlyRepository implements EbiFly {
                 }
             }
             return quantity;
+        }
+
+        private Map<OfflinePlayer, Double> clearCredits() {
+            // クレジット消費
+            long nano = useCredit(); // 未徴収分
+            if (credit.isEmpty()) {
+                return Collections.emptyMap();
+            }
+
+            // 秒割料金
+            Credit c;
+            int remain;
+            do {
+                if ((c = credit.pollFirst()) == null) {
+                    return Collections.emptyMap(); // クレジットないならこの先の処理は全て無駄なのでreturn
+                }
+            } while (c.payer() == null || (remain = c.minute().get()) <= 0); // 空クレジットなら捨ててやり直し
+
+            double refund = c.price() * remain; // 返金額
+            // (単価/単位=ナノ秒単価)*経過時間 == ナノ秒単位消費金額。除算を後回しにすることで浮動小数の演算誤差を減らすことを意図した
+            refund -= (c.price() * nano) / ((double) TimeUnit.MINUTES.toNanos(1));
+
+            Map<OfflinePlayer, Double> ret = new HashMap<>();
+            ret.put(c.payer(), refund);
+            // 残クレジットまとめて入れる
+            while ((c = credit.pollFirst()) != null) {
+                if (c.payer() != null) {
+                    ret.merge(c.payer(), c.price() * c.minute().get(), Double::sum);
+                }
+            }
+
+            return ret;
         }
     }
 

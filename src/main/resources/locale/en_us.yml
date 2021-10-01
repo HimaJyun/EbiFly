@@ -6,9 +6,11 @@ fly:
   enable: "Flight is &aenabled&r!"
   disable: "Flight is &cdisable&r!"
   timeout: "&cFlight will end in &r{time} seconds&c!"
-  send: "Send {time} credits to {player}!"
-  receive: "Receive {time} credits from {player}!"
+  add: "Add {time} minute flight time"
+  send: "Sent {time} minute flight time to {player}!"
+  receive: "Received {time} minute flight time from {player}!"
   creative: "Can't use in creative mode!"
+  unavailable: "This currently can not be used!"
 
 payment:
   persist: "You paid {price} for flight!"
@@ -16,7 +18,7 @@ payment:
   other: "You paid {price} for {time} minute flight of {player}!"
   receive: "{player} paid for {time} minute flight to You!"
   refund: "Refunded {price} for unused flight!"
-  refundOther: "{price} has been refunded because {player} has disabled the flight."
+  refundOther: "{price} has been refunded because {player} flight has been disabled."
   insufficient: "Insufficient funds! {price} is required to fly!"
 
 help:

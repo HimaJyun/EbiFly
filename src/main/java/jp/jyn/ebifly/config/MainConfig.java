@@ -24,9 +24,11 @@ public class MainConfig {
     public final boolean localeEnable;
     public final String localeDefault;
 
-    // TODO: 権限チェック？
-    //public final boolean disablingLevitation;
-    //public final boolean disablingChangeWorld;
+    public final boolean restrictRespawn;
+    public final boolean restrictWorld;
+    public final boolean restrictGamemode;
+    public final Boolean restrictLevitation;
+    public final Boolean restrictWater;
 
     public final EconomyConfig economy;
 
@@ -50,8 +52,14 @@ public class MainConfig {
         localeEnable = config.getBoolean("locale.enable");
         localeDefault = Objects.requireNonNull(config.getString("locale.default"), "locale.default is null");
 
+        restrictRespawn = config.getBoolean("restrict.respawn");
+        restrictWorld = config.getBoolean("restrict.world");
+        restrictGamemode = config.getBoolean("restrict.gamemode");
+        restrictLevitation = triple(config.getString("restrict.levitation"), "temporary");
+        restrictWater = triple(config.getString("restrict.water"), "temporary");
+
         if (config.getBoolean("economy.enable")) {
-            var e = new EconomyConfig(logger, getSection(logger, config, "economy"));
+            var e = new EconomyConfig(getSection(logger, config, "economy"));
             if (Double.compare(e.price, 0) <= 0) {
                 logger.warning("economy.price is 0 or less in config.yml");
                 logger.warning("Disabled economy feature.");
@@ -116,35 +124,26 @@ public class MainConfig {
         }
     }
 
+    private static Boolean triple(String value, String tripe) {
+        if (value == null) {
+            return null;
+        }
+
+        var v = value.toLowerCase(Locale.ROOT);
+        return v.equals("true") ? Boolean.TRUE
+            : v.equals(tripe) ? Boolean.FALSE
+            : null;
+    }
+
     public static class EconomyConfig {
-        public enum RefundType {TRUE, FALSE, PAYER}
-
-        public final boolean async; // TODO: 常に同期で良い？
         public final double price;
-
         public final String server;
-        public final RefundType refund;
+        public final Boolean refund; // trueならself、falseならpayer
 
-        private EconomyConfig(Logger logger, ConfigurationSection config) {
+        private EconomyConfig(ConfigurationSection config) {
             price = config.getDouble("price");
             server = config.getString("server");
-            async = config.getBoolean("async");
-
-            var r = config.getString("refund");
-            RefundType t;
-            if (r == null) {
-                logger.severe("economy.refund is null in config.yml");
-                logger.severe("Using default value");
-                r = RefundType.TRUE.name();
-            }
-            try {
-                t = RefundType.valueOf(r.toUpperCase(Locale.ROOT));
-            } catch (IllegalArgumentException e) {
-                logger.severe("%s is invalid value in config.yml".formatted(r));
-                logger.severe("Using default value");
-                t = RefundType.TRUE;
-            }
-            refund = t;
+            refund = triple(config.getString("refund"), "payer");
         }
     }
 

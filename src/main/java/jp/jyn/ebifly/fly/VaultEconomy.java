@@ -65,15 +65,21 @@ public class VaultEconomy {
         return economy.format(value);
     }
 
-    // TODO: インターフェースすり替え方針ではダメ、都度有効か見ないと
-    // TODO: メインスレッドかどうかを見た方が良いかも -> そもそもスレッド使ってない
     public boolean deposit(OfflinePlayer player, double amount) {
+        if (Double.compare(amount, 0.0d) <= 0) {
+            throw new IllegalArgumentException("amount is 0 or less: " + amount);
+        }
+
         serverW.accept(amount);
         // サーバーの残金がないからと言って特に何か出来るわけじゃない(どっちみち停止を要求されたflyは止める他ない)ので、あろうがなかろうが入金(返金)処理は続行する
         return economy.depositPlayer(player, amount).type == EconomyResponse.ResponseType.SUCCESS;
     }
 
     public boolean withdraw(OfflinePlayer player, double amount) {
+        if (Double.compare(amount, 0.0d) <= 0) {
+            throw new IllegalArgumentException("amount is 0 or less: " + amount);
+        }
+
         if (economy.has(player, amount) &&
             economy.withdrawPlayer(player, amount).type == EconomyResponse.ResponseType.SUCCESS) {
             serverD.accept(amount);

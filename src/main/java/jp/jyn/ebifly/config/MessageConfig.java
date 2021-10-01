@@ -29,9 +29,11 @@ public class MessageConfig {
 
     public final ComponentParser flyEnable;
     public final ComponentParser flyDisable;
+    public final ComponentParser flyAdd;
     public final ComponentParser flySend;
     public final ComponentParser flyReceive;
     public final ComponentParser flyCreative;
+    public final ComponentParser flyUnavailable;
     public final BiConsumer<Player, ComponentVariable> flyTimeout;
 
     public final PaymentMessage payment;
@@ -55,9 +57,11 @@ public class MessageConfig {
 
         flyEnable = p(s.apply("fly.enable"));
         flyDisable = p(s.apply("fly.disable"));
+        flyAdd = p(s.apply("fly.add"));
         flySend = p(s.apply("fly.send"));
         flyReceive = p(s.apply("fly.receive"));
         flyCreative = p(s.apply("fly.creative"));
+        flyUnavailable = p(s.apply("fly.unavailable"));
         flyTimeout = !main.noticeTimeoutActionbar
             ? c(s.apply("fly.timeout"))
             : cc(s.apply("fly.timeout"), st -> {

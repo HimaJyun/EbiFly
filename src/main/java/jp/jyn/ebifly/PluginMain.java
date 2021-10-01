@@ -4,6 +4,7 @@ import jp.jyn.ebifly.config.MainConfig;
 import jp.jyn.ebifly.config.MessageConfig;
 import jp.jyn.ebifly.fly.FlyCommand;
 import jp.jyn.ebifly.fly.FlyRepository;
+import jp.jyn.ebifly.fly.RestrictListener;
 import jp.jyn.ebifly.fly.VaultEconomy;
 import jp.jyn.jbukkitlib.config.YamlLoader;
 import jp.jyn.jbukkitlib.config.locale.BukkitLocale;
@@ -80,8 +81,8 @@ public class PluginMain extends JavaPlugin {
 
         // リポジトリ
         var economy = config.economy == null ? null : new VaultEconomy(config);
-        var repository = new FlyRepository(config, message, executor, economy,
-            r -> getServer().getScheduler().runTask(this, r));
+        Consumer<Runnable> syncCall = r -> getServer().getScheduler().runTask(this, r);
+        var repository = new FlyRepository(config, message, executor, economy, syncCall);
         instance.setInstance(repository);
         destructor.addFirst(() -> instance.setInstance(null));
         // API登録(たぶん誰も使わない)
@@ -89,6 +90,8 @@ public class PluginMain extends JavaPlugin {
         destructor.addFirst(() -> getServer().getServicesManager().unregister(instance));
 
         // TODO: イベント
+        var listener = new RestrictListener(this, config, repository, syncCall);
+        destructor.addFirst(() -> HandlerList.unregisterAll(listener));
 
         // コマンド
         var command = new FlyCommand(this, config, message, repository, economy, checker, this::reload);

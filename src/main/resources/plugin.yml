@@ -17,6 +17,16 @@ permissions:
     default: true
   ebifly.other:
     default: true
+  ebifly.restrict.respawn:
+    default: true
+  ebifly.restrict.world:
+    default: true
+  ebifly.restrict.gamemode:
+    default: false
+  ebifly.restrict.levitation:
+    default: op
+  ebifly.restrict.water:
+    default: op
   ebifly.free:
     default: op
   ebifly.version:
