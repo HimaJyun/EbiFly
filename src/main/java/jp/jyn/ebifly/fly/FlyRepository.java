@@ -6,7 +6,6 @@ import jp.jyn.ebifly.config.MessageConfig;
 import jp.jyn.jbukkitlib.config.locale.BukkitLocale;
 import jp.jyn.jbukkitlib.config.parser.component.ComponentVariable;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 
@@ -36,9 +35,9 @@ public class FlyRepository implements EbiFly {
     private final int notify;
     private final double price;
     private final Boolean refundType;
-    private final Consumer<Location> noticeDisable;
-    private final Consumer<Location> noticeTimeout;
-    private final Consumer<Location> noticePayment;
+    private final Consumer<Player> noticeDisable;
+    private final Consumer<Player> noticeTimeout;
+    private final Consumer<Player> noticePayment;
 
     public FlyRepository(MainConfig config, BukkitLocale<MessageConfig> message,
                          ScheduledExecutorService executor, VaultEconomy economy,
@@ -81,7 +80,7 @@ public class FlyRepository implements EbiFly {
         };
         final Consumer<Player> m = notice ? p -> { // IFスリカエ
             message.get(p).flyDisable.apply().send(p);
-            noticeDisable.accept(p.getEyeLocation());
+            noticeDisable.accept(p);
         } : p -> {};
         // 無駄な最適化かも
 
@@ -165,7 +164,7 @@ public class FlyRepository implements EbiFly {
             if (economy.withdraw(player, price)) {
                 // 支払い完了、ﾏｲﾄﾞｱﾘｰ
                 m.persist.accept(player, () -> economy.format(price));
-                noticePayment.accept(player.getEyeLocation());
+                noticePayment.accept(player);
                 cs.addLast(new Credit(price, 1, player));
             } else {
                 // お金ないならｵﾁﾛｰ!
@@ -194,7 +193,7 @@ public class FlyRepository implements EbiFly {
             // パーティクル表示があるのでメインスレッドで
             var m = message.get(player).flyTimeout;
             syncCall.accept(() -> {
-                noticeTimeout.accept(player.getEyeLocation());
+                noticeTimeout.accept(player);
                 m.accept(player, () -> String.valueOf(this.notify));
             });
             v.setTimer(executor.schedule(() -> stopTimer(player, false), this.notify, TimeUnit.SECONDS));

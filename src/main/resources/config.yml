@@ -37,10 +37,12 @@ notice:
       count: 10
       offset: { x: 0.5, y: 0.5, z: 0.5 } # Hint: Need space, 'x:0' is invalid, 'x: 0' is valid.
       extra: 0 # extra data (Also known as 'speed')
+      global: true # show globally if true, player only if false.
     sound:
-      type: BLOCK_NOTE_BLOCK_CHIME # false/enum ( https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Sound.html )
+      type: BLOCK_BEACON_ACTIVATE # false/enum ( https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Sound.html )
       volume: 1.0
-      pitch: 0.8
+      pitch: 1.8
+      global: false
   disable:
     particle:
       type: SMOKE_LARGE
@@ -50,22 +52,26 @@ notice:
         y: 0.5
         z: 0.5
       extra: 0
+      global: true
     sound:
-      type: BLOCK_NOTE_BLOCK_FLUTE
+      type: BLOCK_BEACON_DEACTIVATE
       volume: 1.0
-      pitch: 0.5
+      pitch: 1.5
+      global: false
   timeout:
-    position: subtitle # for suppress chat log. (false/chat/title/subtitle/actionbar)
+    position: subtitle # for suppress chat log. (false/chat/actionbar/subtitle/title)
     second: 30 # Warn before the end of flight. (Unit: second, Must be less than 60, 0 for disabled)
     particle:
       type: FIREWORKS_SPARK
       count: 10
       offset: 0.5 # syntax sugar
       extra: 0.1
+      global: true
     sound:
-      type: BLOCK_NOTE_BLOCK_PLING
+      type: ENTITY_PLAYER_LEVELUP
       volume: 1.0
       pitch: 0.7
+      global: false
     title: # unit: seconds
       fadeIn: 0.5
       stay: 28.5
@@ -77,10 +83,12 @@ notice:
       count: 10
       offset: { x: 0.5, y: 0.5, z: 0.5 }
       extra: 0
+      global: true
     sound:
-      type: BLOCK_NOTE_BLOCK_BELL
+      type: BLOCK_BEACON_POWER_SELECT
       volume: 1.0
-      pitch: 1.2
+      pitch: 1.5
+      global: false
     title:
       fadeIn: 0.5
       stay: 3.5

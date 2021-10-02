@@ -6,7 +6,6 @@ import jp.jyn.ebifly.config.MessageConfig;
 import jp.jyn.jbukkitlib.config.locale.BukkitLocale;
 import jp.jyn.jbukkitlib.config.parser.component.ComponentVariable;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -35,9 +34,9 @@ public class FlyCommand implements TabExecutor {
 
     private final double price;
     private final Boolean restrictLevitation;
-    private final Consumer<Location> noticeEnable;
-    private final Consumer<Location> noticeEnablePaid;
-    private final Consumer<Location> noticePayment;
+    private final Consumer<Player> noticeEnable;
+    private final Consumer<Player> noticeEnablePaid;
+    private final Consumer<Player> noticePayment;
 
     public FlyCommand(PluginMain plugin, MainConfig config, BukkitLocale<MessageConfig> message,
                       FlyRepository fly, VaultEconomy economy,
@@ -158,7 +157,7 @@ public class FlyCommand implements TabExecutor {
 
         double price;
         OfflinePlayer payer;
-        Consumer<Location> notice;
+        Consumer<Player> notice;
         var l = message.get(player);
         if (isEconomyEnable() && !player.hasPermission("ebifly.free")) {
             var v = ComponentVariable.init().put("price", () -> economy.format(this.price));
@@ -178,7 +177,7 @@ public class FlyCommand implements TabExecutor {
         }
 
         if (fly.addCredit(player, price, 1, payer, true)) {
-            notice.accept(player.getEyeLocation());
+            notice.accept(player);
             l.flyEnable.apply().send(player);
         }
     }
@@ -191,7 +190,8 @@ public class FlyCommand implements TabExecutor {
 
         Player payer = sender instanceof Player p ? p : null;
         var p = price;
-        if (isEconomyEnable() && payer != null && !payer.hasPermission("ebifly.free")) {
+        if (isEconomyEnable() && payer != null
+            && !payer.hasPermission("ebifly.free") && !recipient.hasPermission("ebifly.free")) {
             var l = message.get(payer).payment;
             var v = ComponentVariable.init().put("price", economy.format(p * minute));
             if (!economy.withdraw(payer, p * minute)) {
@@ -231,16 +231,21 @@ public class FlyCommand implements TabExecutor {
             // 飛び始めた
             message.get(recipient).flyEnable.apply().send(recipient);
             if (payer == null) {
-                noticeEnable.accept(recipient.getEyeLocation());
+                noticeEnable.accept(recipient);
+                if (!self && sender instanceof Player pl) {
+                    noticePayment.accept(pl);
+                }
             } else if (self) {
-                noticeEnablePaid.accept(recipient.getEyeLocation());
+                noticeEnablePaid.accept(recipient);
             } else {
-                noticeEnable.accept(recipient.getEyeLocation());
-                noticePayment.accept(payer.getEyeLocation());
+                noticeEnable.accept(recipient);
+                noticePayment.accept(payer);
             }
         } else {
-            if (payer != null) {
-                noticePayment.accept(payer.getEyeLocation());
+            // クレジット追加時は常に追加した側/された側に支払い音を鳴らす(たとえ無料ユーザーでも)
+            noticePayment.accept(recipient);
+            if (!self && sender instanceof Player pl) {
+                noticePayment.accept(pl);
             }
         }
     }

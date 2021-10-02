@@ -2,12 +2,11 @@ package jp.jyn.ebifly.config;
 
 import jp.jyn.ebifly.PluginMain;
 import jp.jyn.jbukkitlib.config.YamlLoader;
-import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
-import org.bukkit.SoundCategory;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import java.util.Locale;
@@ -186,12 +185,12 @@ public class MainConfig {
     }
 
     public static class NoticeConfig {
-        private final static Consumer<Location> DISABLE = ignore -> {};
+        private final static Consumer<Player> DISABLE = ignore -> {};
 
-        public final Consumer<Location> particle;
-        public final Consumer<Location> sound;
+        public final Consumer<Player> particle;
+        public final Consumer<Player> sound;
 
-        private Consumer<Location> merged = null;
+        private Consumer<Player> merged = null;
 
         private NoticeConfig(Logger logger, ConfigurationSection config) {
             var p = getType(Particle.class, logger, config, "particle");
@@ -210,8 +209,10 @@ public class MainConfig {
                     y = config.getDouble("particle.offset.y", 0.5);
                     z = config.getDouble("particle.offset.z", 0.5);
                 }
-                particle = l -> Objects.requireNonNull(l.getWorld(), "Location don't have world.")
-                    .spawnParticle(p, l, c, x, y, z, e);
+                // 目の高さで表示した方が分かりやすい
+                particle = config.getBoolean("particle.global")
+                    ? player -> player.getWorld().spawnParticle(p, player.getEyeLocation(), c, x, y, z, e)
+                    : player -> player.spawnParticle(p, player.getEyeLocation(), c, x, y, z, e);
             }
 
             var s = getType(Sound.class, logger, config, "sound");
@@ -220,18 +221,22 @@ public class MainConfig {
             } else {
                 var v = (float) config.getDouble("sound.volume", 1.0d);
                 var pi = (float) config.getDouble("sound.pitch", 1.0d);
-                sound = l -> Objects.requireNonNull(l.getWorld(), "Location don't have world.")
-                    .playSound(l, s, SoundCategory.PLAYERS, v, pi);
+                sound = config.getBoolean("sound.global")
+                    ? player -> player.getWorld().playSound(player.getLocation(), s, v, pi)
+                    : player -> player.playSound(player.getLocation(), s, v, pi);
             }
+
+            // Player#playSoundやspawnParticleは該当プレイヤーに対してだけ効果が起きる
+            // World版はその場にいる人全員に起きる。
         }
 
-        public Consumer<Location> merge() {
+        public Consumer<Player> merge() {
             return merged != null ? merged
                 : (merged = (particle != DISABLE && sound != DISABLE ? particle.andThen(sound)
                 : particle == DISABLE ? sound : particle));
         }
 
-        public Consumer<Location> merge(NoticeConfig second) {
+        public Consumer<Player> merge(NoticeConfig second) {
             var p = particle != DISABLE ? particle : second.particle;
             var s = sound != DISABLE ? sound : second.sound;
             return p != DISABLE && s != DISABLE ? p.andThen(s) : p == DISABLE ? s : p;
