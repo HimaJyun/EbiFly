@@ -265,7 +265,7 @@ public class MainConfig {
         }
     }
 
-    public record NoticePosition(Position position, int fadeIn, int stay, int fadeOut) {
+    public static final record NoticePosition(Position position, int fadeIn, int stay, int fadeOut) {
         public enum Position {FALSE, CHAT, ACTION_BAR, SUB_TITLE, TITLE}
     }
 }

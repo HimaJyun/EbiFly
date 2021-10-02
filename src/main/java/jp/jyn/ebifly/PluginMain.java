@@ -14,10 +14,13 @@ import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
@@ -40,16 +43,26 @@ public class PluginMain extends JavaPlugin {
 
         // 設定ロード
         var config = new MainConfig(this);
+        // メッセージロード
+        var def = YamlConfiguration.loadConfiguration(new InputStreamReader(
+            Objects.requireNonNull(this.getResource("locale/en_us.yml"),
+                "can't load locale/en_us.yml from jar." +
+                    " You using non-modded jar? Please try re-download jar and checking hash." +
+                    " (from: https://github.com/HimaJyun/EbiFly/ )"
+            ), StandardCharsets.UTF_8)
+        );
         BukkitLocale<MessageConfig> message;
         YamlLoader.copyDir(this, "locale");
         if (config.localeEnable) {
             var locale = YamlLoader.findYaml(this, "locale")
                 .stream()
                 .map(YamlLoader::removeExtension)
-                .collect(Collectors.toMap(UnaryOperator.identity(), l -> new MessageConfig(this, l, config)));
+                .collect(Collectors.toMap(UnaryOperator.identity(), l -> new MessageConfig(this, def, l, config)));
             message = new MultiLocale<>(config.localeDefault, locale);
         } else {
-            message = new SingleLocale<>(config.localeDefault, new MessageConfig(this, config.localeDefault, config));
+            message = new SingleLocale<>(config.localeDefault,
+                new MessageConfig(this, def, config.localeDefault, config)
+            );
         }
 
         // バージョンチェッカー
@@ -100,8 +113,8 @@ public class PluginMain extends JavaPlugin {
         fly.setTabCompleter(command);
         destructor.addFirst(() -> {
             var f = Objects.requireNonNull(getServer().getPluginCommand("fly"));
-            fly.setTabCompleter(this);
-            fly.setExecutor(this);
+            f.setTabCompleter(this);
+            f.setExecutor(this);
         });
     }
 

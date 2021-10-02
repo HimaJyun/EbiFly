@@ -7,6 +7,7 @@ import jp.jyn.jbukkitlib.config.parser.component.ComponentVariable;
 import jp.jyn.jbukkitlib.config.parser.template.TemplateParser;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.Configuration;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.MemoryConfiguration;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -40,9 +41,9 @@ public class MessageConfig {
     public final PaymentMessage payment;
     public final HelpMessage help;
 
-    public MessageConfig(PluginMain plugin, String locale, MainConfig main) {
+    public MessageConfig(PluginMain plugin, Configuration def, String locale, MainConfig main) {
         this.locale = locale;
-        var config = loadConfig(plugin, locale);
+        var config = loadConfig(plugin, def, locale);
         UnaryOperator<String> s = k -> {
             var v = config.getString(k);
             if (v == null || v.isEmpty()) {
@@ -74,10 +75,13 @@ public class MessageConfig {
         help = new HelpMessage(Objects.requireNonNull(config.getConfigurationSection("help")));
     }
 
-    private FileConfiguration loadConfig(Plugin plugin, String locale) {
+    private FileConfiguration loadConfig(Plugin plugin, Configuration def, String locale) {
         var f = "locale/" + locale + ".yml";
         var l = plugin.getLogger();
         var c = YamlLoader.load(plugin, f);
+        if (c.getDefaultSection() == null) {
+            c.setDefaults(def); // デフォルトがなければセットしてやらないと色々と不都合が起きる
+        }
 
         if (c.getInt("version", -1) != Objects.requireNonNull(c.getDefaults()).getInt("version")) {
             l.warning("Detected plugin downgrade!!");

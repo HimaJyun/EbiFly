@@ -4,9 +4,6 @@ import jp.jyn.ebifly.PluginMain;
 import jp.jyn.ebifly.config.MainConfig;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
-import org.bukkit.Material;
-import org.bukkit.block.data.Levelled;
-import org.bukkit.block.data.Waterlogged;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -132,27 +129,6 @@ public class RestrictListener implements Listener {
                     }
                 }
             }
-        }
-    }
-
-    private boolean canBreath(Player player) {
-        var l = player.getEyeLocation();
-        var b = l.getBlock();
-        if (b.getType() != Material.WATER) {
-            return !(b.getBlockData() instanceof Waterlogged w) || !w.isWaterlogged();
-        } else {
-            if (b.getBlockData() instanceof Levelled lv) {
-                var height = 1 - (0.125 * lv.getLevel());
-                if (Double.compare(height, 0) <= 0) {
-                    return false;
-                }
-                var nose = l.getY();
-                nose -= (int) nose; // 小数点以下だけ取る
-                nose -= 0.05; // 目の位置から0.05下げた所が鼻っぽい？
-                nose += 0.01; // 補正値
-                return Double.compare(height, nose) < 0;
-            }
-            return true;
         }
     }
 
