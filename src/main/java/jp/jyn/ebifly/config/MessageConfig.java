@@ -4,6 +4,7 @@ import jp.jyn.ebifly.PluginMain;
 import jp.jyn.jbukkitlib.config.YamlLoader;
 import jp.jyn.jbukkitlib.config.parser.component.ComponentParser;
 import jp.jyn.jbukkitlib.config.parser.component.ComponentVariable;
+import jp.jyn.jbukkitlib.config.parser.template.TemplateParser;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
@@ -14,7 +15,7 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.Objects;
 import java.util.function.BiConsumer;
-import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
 public class MessageConfig {
@@ -34,7 +35,7 @@ public class MessageConfig {
     public final ComponentParser flyReceive;
     public final ComponentParser flyCreative;
     public final ComponentParser flyUnavailable;
-    public final BiConsumer<Player, ComponentVariable> flyTimeout;
+    public final BiConsumer<Player, Supplier<String>> flyTimeout;
 
     public final PaymentMessage payment;
     public final HelpMessage help;
@@ -62,12 +63,8 @@ public class MessageConfig {
         flyReceive = p(s.apply("fly.receive"));
         flyCreative = p(s.apply("fly.creative"));
         flyUnavailable = p(s.apply("fly.unavailable"));
-        flyTimeout = !main.noticeTimeoutActionbar
-            ? c(s.apply("fly.timeout"))
-            : cc(s.apply("fly.timeout"), st -> {
-            var c = ComponentParser.parse(st);
-            return (p, v) -> c.apply(v).actionbar(p);
-        });
+        flyTimeout = cp(main.noticeTimeoutPosition, s.apply("fly.timeout"), "time");
+        // ↑ その気になれば事前にapplyしておける
 
         payment = new PaymentMessage(main.economy != null
             ? Objects.requireNonNull(config.getConfigurationSection("payment"))
@@ -95,23 +92,42 @@ public class MessageConfig {
     }
 
     private static <T extends CommandSender> BiConsumer<T, ComponentVariable> c(String value) {
-        return cc(value, s -> {
-            var c = p(s);
-            return (p, v) -> c.apply(v).send(p);
-        });
-    }
-
-    private static <T extends CommandSender> BiConsumer<T, ComponentVariable> cc(
-        String value, Function<String, BiConsumer<T, ComponentVariable>> mapper) {
         if (value == null || value.isEmpty()) {
             return (p, v) -> {};
         }
 
-        return mapper.apply(value);
+        var c = p(value);
+        return (p, v) -> c.apply(v).send(p);
+    }
+
+    private static BiConsumer<Player, Supplier<String>> cp(MainConfig.NoticePosition pos, String value, String key) {
+        if (value == null) {
+            return (p, v) -> {};
+        }
+        return switch (pos.position()) {
+            case FALSE -> (p, v) -> {};
+            case CHAT -> {
+                var cc = p(value);
+                yield (p, v) -> cc.apply(key, v).send(p);
+            }
+            case ACTION_BAR -> {
+                var ca = ComponentParser.parse(value);
+                yield (p, v) -> ca.apply(key, v).actionbar(p);
+            }
+            case TITLE -> {
+                var tt = TemplateParser.parse(value);
+                yield (p, v) -> p.sendTitle(tt.apply(key, v), "", pos.fadeIn(), pos.stay(), pos.fadeOut());
+            }
+            case SUB_TITLE -> {
+                var ts = TemplateParser.parse(value);
+                yield (p, v) -> p.sendTitle(" " /* 空文字だと表示されないので空白を送る */, ts.apply(key, v),
+                    pos.fadeIn(), pos.stay(), pos.fadeOut());
+            }
+        };
     }
 
     public final static class PaymentMessage {
-        public final BiConsumer<Player, ComponentVariable> persist;
+        public final BiConsumer<Player, Supplier<String>> persist;
         public final BiConsumer<Player, ComponentVariable> persistP; // 常にプレフィックス持ち
         public final BiConsumer<Player, ComponentVariable> self;
         public final BiConsumer<Player, ComponentVariable> other;
@@ -122,16 +138,8 @@ public class MessageConfig {
 
         private PaymentMessage(ConfigurationSection config, MainConfig main) {
             UnaryOperator<String> s = k -> config.getString(k, null);
-            if (main.noticePaymentActionbar) {
-                var v = s.apply("persist");
-                persist = cc(v, st -> {
-                    var c = ComponentParser.parse(st);
-                    return (p, va) -> c.apply(va).actionbar(p);
-                });
-                persistP = c(v);
-            } else {
-                persist = persistP = c(s.apply("persist"));
-            }
+            persist = cp(main.noticePaymentPosition, s.apply("persist"), "price");
+            persistP = c(s.apply("persist"));
             self = c(s.apply("self"));
             other = c(s.apply("other"));
             receive = c(s.apply("receive"));

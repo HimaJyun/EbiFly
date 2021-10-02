@@ -13,6 +13,7 @@ import org.bukkit.plugin.Plugin;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.logging.Logger;
 
 public class MainConfig {
@@ -38,8 +39,8 @@ public class MainConfig {
     public final NoticeConfig noticePayment;
 
     public final int noticeTimeoutSecond;
-    public final boolean noticeTimeoutActionbar;
-    public final boolean noticePaymentActionbar;
+    public final NoticePosition noticeTimeoutPosition;
+    public final NoticePosition noticePaymentPosition;
 
     public MainConfig(PluginMain plugin) {
         var logger = plugin.getLogger();
@@ -82,8 +83,8 @@ public class MainConfig {
             logger.severe("Using 60");
         }
         noticeTimeoutSecond = Math.min(second, 60);
-        noticeTimeoutActionbar = config.getBoolean("notice.timeout.actionbar", false);
-        noticePaymentActionbar = config.getBoolean("notice.payment.actionbar", false);
+        noticeTimeoutPosition = pos(logger, config, "notice.timeout");
+        noticePaymentPosition = pos(logger, config, "notice.payment");
     }
 
     private static FileConfiguration loadConfig(Plugin plugin) {
@@ -135,6 +136,43 @@ public class MainConfig {
             : null;
     }
 
+    private static NoticePosition pos(Logger logger,
+                                      ConfigurationSection config, String key) {
+        var p = config.getString(key + ".position", key + ".position");
+        var e = switch (p.toLowerCase(Locale.ROOT)) {
+            case "false", "null" -> NoticePosition.Position.FALSE;
+            case "true", "chat" -> NoticePosition.Position.CHAT;
+            case "actionbar" -> NoticePosition.Position.ACTION_BAR;
+            case "subtitle" -> NoticePosition.Position.SUB_TITLE;
+            case "title" -> NoticePosition.Position.TITLE;
+            default -> {
+                logger.warning(p + " is invalid in config.yml");
+                yield NoticePosition.Position.FALSE;
+            }
+        };
+
+        // 本当はrecord作った方が良い
+        Function<String, Integer> s = str -> {
+            var k = key + ".title." + str;
+            if (config.get(k) instanceof Number n) { // isXxxだと型がピッタリ合わないと認識しない
+                if (Double.compare(n.doubleValue(), 0) < 0) {
+                    logger.warning(k + " is 0 or less in config.yml");
+                    return 0;
+                } else {
+                    return (int) (n.doubleValue() * 20);
+                }
+            } else {
+                logger.warning(k + " is invalid in config.yml");
+                return 0;
+            }
+        };
+
+        return switch (e) {
+            case TITLE, SUB_TITLE -> new NoticePosition(e, s.apply("fadeIn"), s.apply("stay"), s.apply("fadeOut"));
+            default -> new NoticePosition(e, 0, 0, 0);
+        };
+    }
+
     public static class EconomyConfig {
         public final double price;
         public final String server;
@@ -163,9 +201,10 @@ public class MainConfig {
                 var c = config.getInt("particle.count", 1);
                 var e = config.getDouble("particle.extra", 0d);
                 double x, y, z;
-                if (config.contains("particle.offset", true) && config.isDouble("particle.offset")) {
+                if (config.contains("particle.offset", true)
+                    && (config.get("particle.offset", null) instanceof Number n)) {
                     // offsetに数値を指定するとxyzに同じ値を設定
-                    x = y = z = config.getDouble("particle.offset", 0.5);
+                    x = y = z = n.doubleValue();
                 } else {
                     x = config.getDouble("particle.offset.x", 0.5);
                     y = config.getDouble("particle.offset.y", 0.5);
@@ -219,5 +258,9 @@ public class MainConfig {
                 return null;
             }
         }
+    }
+
+    public record NoticePosition(Position position, int fadeIn, int stay, int fadeOut) {
+        public enum Position {FALSE, CHAT, ACTION_BAR, SUB_TITLE, TITLE}
     }
 }

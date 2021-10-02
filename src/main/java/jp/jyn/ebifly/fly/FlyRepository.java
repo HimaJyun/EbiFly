@@ -149,7 +149,6 @@ public class FlyRepository implements EbiFly {
         // 先にスレッド側で色々作っておく
         var b = unpaid;
         var m = message.get(player).payment;
-        var cv = ComponentVariable.init().put("price", () -> economy.format(price));
         syncCall.accept(() -> {
             // 支払い不要
             if (player.hasPermission("ebifly.free")) {
@@ -165,12 +164,12 @@ public class FlyRepository implements EbiFly {
             // クレジット切れてる -> ｵｶﾈﾀﾞｰ!!
             if (economy.withdraw(player, price)) {
                 // 支払い完了、ﾏｲﾄﾞｱﾘｰ
-                m.persist.accept(player, cv);
+                m.persist.accept(player, () -> economy.format(price));
                 noticePayment.accept(player.getEyeLocation());
                 cs.addLast(new Credit(price, 1, player));
             } else {
                 // お金ないならｵﾁﾛｰ!
-                m.insufficient.accept(player, cv);
+                m.insufficient.accept(player, ComponentVariable.init().put("price", () -> economy.format(price)));
                 remove(player, true);
             }
         });
@@ -194,11 +193,9 @@ public class FlyRepository implements EbiFly {
         } else if (notify) { // 停止タイマー入れ直す
             // パーティクル表示があるのでメインスレッドで
             var m = message.get(player).flyTimeout;
-            var cv = ComponentVariable.init().put("time", this.notify);
-            // ↑ その気になれば事前にapplyしておける
             syncCall.accept(() -> {
                 noticeTimeout.accept(player.getEyeLocation());
-                m.accept(player, cv);
+                m.accept(player, () -> String.valueOf(this.notify));
             });
             v.setTimer(executor.schedule(() -> stopTimer(player, false), this.notify, TimeUnit.SECONDS));
         } else { // 停止

@@ -55,7 +55,7 @@ notice:
       volume: 1.0
       pitch: 0.5
   timeout:
-    actionbar: false # Show message to action bar for suppress chat log.
+    position: subtitle # for suppress chat log. (false/chat/title/subtitle/actionbar)
     second: 30 # Warn before the end of flight. (Unit: second, Must be less than 60, 0 for disabled)
     particle:
       type: FIREWORKS_SPARK
@@ -66,8 +66,12 @@ notice:
       type: BLOCK_NOTE_BLOCK_PLING
       volume: 1.0
       pitch: 0.7
+    title: # unit: seconds
+      fadeIn: 0.5
+      stay: 28.5
+      fadeOut: 1
   payment:
-    actionbar: true # for persist flight payment.
+    position: actionbar # for persist flight payment.
     particle:
       type: BUBBLE_POP
       count: 10
@@ -77,8 +81,10 @@ notice:
       type: BLOCK_NOTE_BLOCK_BELL
       volume: 1.0
       pitch: 1.2
-# payment.persist
-# timeout.before
+    title:
+      fadeIn: 0.5
+      stay: 3.5
+      fadeOut: 1
 
 # Multi locale support.
 locale:
