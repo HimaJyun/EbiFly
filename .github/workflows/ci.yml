@@ -1,0 +1,18 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: maven package
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: ["16"]
+    steps:
+      - uses: actions/checkout@v1
+      - name: JDK ${{ matrix.java }}
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ matrix.java }}
+      - name: Maven package
+        run: mvn package

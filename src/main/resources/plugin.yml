@@ -1,34 +1,77 @@
-main: jp.jyn.ebifly.EbiFly
-name: "${project.artifactId}"
+main: "jp.jyn.ebifly.PluginMain"
+name: "EbiFly"
 version: "${project.version}"
-website: https://jyn.jp/
-author: '@HimaJyun'
-softdepend: [Vault]
+website: "${project.url}"
+author: "HimaJyun( https://jyn.jp/ )"
+description: "${project.description}"
+softdepend: [ "Vault" ]
+api-version: "1.17"
 
 commands:
-   fly:
-     description: 'Switching of flight'
+  fly:
+    description: "\"/fly [time] [player]\" - I can fly!"
+    aliases: [ "ebifly" ]
 
 permissions:
-  ebifly.*:
-    children:
-      ebifly.fly: true
-      ebifly.worldchange: true
-      ebifly.other: true
-      ebifly.infinity: true
-      ebifly.free: true
-  ebifly.op:
-    children:
-      ebifly.other: true
-      ebifly.infinity: true
-      ebifly.free: true
-  ebifly.fly:
+  ebifly.fly.self:
     default: true
-  ebifly.worldchange:
+  ebifly.fly.other:
     default: true
-  ebifly.other:
+  ebifly.restrict.respawn:
+    default: true
+  ebifly.restrict.world:
+    default: true
+  ebifly.restrict.gamemode:
+    default: false
+  ebifly.restrict.levitation:
     default: op
-  ebifly.infinity:
+  ebifly.restrict.water:
     default: op
   ebifly.free:
     default: op
+  ebifly.version:
+    default: op
+  ebifly.reload:
+    default: op
+  ebifly.fly.*:
+    default: false
+    children:
+      ebifly.fly.self: true
+      ebifly.fly.other: true
+  ebifly.restrict.*:
+    default: false
+    children:
+      ebifly.restrict.respawn: true
+      ebifly.restrict.world: true
+      ebifly.restrict.gamemode: true
+      ebifly.restrict.levitation: true
+      ebifly.restrict.water: true
+  ebifly.op:
+    default: false
+    children:
+      ebifly.free: true
+      ebifly.version: true
+      ebifly.reload: true
+      ebifly.restrict.water: true
+      ebifly.restrict.levitation: true
+  ebifly.user:
+    default: false
+    children:
+      ebifly.fly.self: true
+      ebifly.fly.other: true
+      ebifly.restrict.respawn: true
+      ebifly.restrict.world: true
+      #ebifly.restrict.gamemode: true
+  ebifly.*:
+    default: false
+    children:
+      ebifly.fly.self: true
+      ebifly.fly.other: true
+      ebifly.restrict.respawn: true
+      ebifly.restrict.world: true
+      ebifly.restrict.gamemode: true
+      ebifly.restrict.water: true
+      ebifly.restrict.levitation: true
+      ebifly.free: true
+      ebifly.version: true
+      ebifly.reload: true

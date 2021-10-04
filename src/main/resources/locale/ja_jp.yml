@@ -1,0 +1,60 @@
+invalidNumber: "&c正の数で指定してください&r: {value}"
+playerNotFound: "&cプレイヤーがみつかりません&r: {name}"
+permissionError: "&cあなたにはコマンドを実行する権限がありません..."
+
+fly:
+  enable: "飛行が&a有効&rになりました！"
+  disable: "飛行が&c無効&rになりました！"
+  timeout: "あと&c{time}秒&rで飛行が終了します！"
+  add: "{time}分間の飛行時間を追加しました！"
+  send: "{player}に{time}分間の飛行時間を与えました！"
+  receive: "{player}から{time}分間の飛行時間を受け取りました！"
+  creative: "&cクリエイティブモードでは使用できません！"
+  unavailable: "&cいまは使用できません！"
+
+payment:
+  persist: "飛行のために{price}を支払いました！"
+  self: "{time}分間の飛行料金{price}を支払いました！"
+  other: "{player}を{time}分間飛行させるために{price}を支払いました！"
+  receive: "{player}が{time}分間の飛行料金{price}を払ってくれました！"
+  refund: "未使用の飛行料金{price}を返金しました！"
+  refundOther: "{player}の飛行が無効になったため、{price}が返金されました。"
+  insufficient: "&cお金が足りません！ 飛行には&r{price}&cが必要です！"
+
+help:
+  fly: "飛行の&a有効&r/&c無効&rを切り替えます。"
+  version: "バージョンを表示します。"
+  reload: "設定をリロードします。"
+  help: "このヘルプを表示します。"
+  time: "時間"
+  player: "プレイヤー"
+
+# //*<!-- syntax -->*/
+# &0->黒(#000000)
+# &1->暗い青(#0000AA)
+# &2->暗い緑(#00AA00)
+# &3->暗い水色(#00AAAA)
+# &4->暗い赤(#AA0000)
+# &5->紫(#AA00AA)
+# &6->金(#FFAA00)
+# &7->灰(#AAAAAA)
+# &8->暗い灰(#555555)
+# &9->青(#5555FF)
+# &a->緑(#55FF55)
+# &b->水色(#55FFFF)
+# &c->赤(#FF5555)
+# &d->明るい紫(#FF55FF)
+# &e->黄(#FFFF55)
+# &f->白(#FFFFFF)
+# &k->動く文字
+# &l->太字
+# &m->打消し
+# &n->下線
+# &o->斜体
+# &r->装飾解除
+# #rrggbb (または #rgb)->16進数カラー
+# &->装飾無効化
+# {変数名}->変数
+
+# ｻﾜﾙﾅｧ!!
+version: 2
