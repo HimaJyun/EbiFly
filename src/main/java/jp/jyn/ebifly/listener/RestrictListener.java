@@ -73,7 +73,11 @@ public class RestrictListener implements Listener {
     public final void onPlayerChangedWorld(PlayerChangedWorldEvent e) {
         // 世界変更時はflyはそのまま
         var p = e.getPlayer();
-        if (!p.hasPermission("ebifly.restrict.world")) {
+        if (p.hasPermission("ebifly.restrict.world")) {
+            if (fly.isFlying(p)) { // テレポートで移動すると止まるので入れ直す
+                p.setAllowFlight(true);
+            }
+        } else {
             fly.stopRefund(p); // なので権限がない時だけ停止する
         }
     }
