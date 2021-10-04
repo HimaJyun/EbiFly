@@ -24,7 +24,7 @@ restrict:
 
 # Vault required.
 economy:
-  enable: true
+  enable: false
   price: 500 # per minute price
   server: "" # Server account (Name or UUID, UUID is better.)
   refund: true # true/false/payer (Hint: 'payer' is refund to payer)
@@ -58,7 +58,7 @@ notice:
       pitch: 1.5
       global: false
   timeout:
-    position: subtitle # for suppress chat log. (false/chat/actionbar/subtitle/title)
+    position: subtitle # for suppress chat log. (false/chat/title/actionbar/subtitle)
     second: 30 # Warn before the end of flight. (Unit: second, Must be less than 60, 0 for disabled)
     particle:
       type: FIREWORKS_SPARK

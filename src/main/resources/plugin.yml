@@ -13,9 +13,9 @@ commands:
     aliases: [ "ebifly" ]
 
 permissions:
-  ebifly.fly:
+  ebifly.fly.self:
     default: true
-  ebifly.other:
+  ebifly.fly.other:
     default: true
   ebifly.restrict.respawn:
     default: true
@@ -33,3 +33,45 @@ permissions:
     default: op
   ebifly.reload:
     default: op
+  ebifly.fly.*:
+    default: false
+    children:
+      ebifly.fly.self: true
+      ebifly.fly.other: true
+  ebifly.restrict.*:
+    default: false
+    children:
+      ebifly.restrict.respawn: true
+      ebifly.restrict.world: true
+      ebifly.restrict.gamemode: true
+      ebifly.restrict.levitation: true
+      ebifly.restrict.water: true
+  ebifly.op:
+    default: false
+    children:
+      ebifly.free: true
+      ebifly.version: true
+      ebifly.reload: true
+      ebifly.restrict.water: true
+      ebifly.restrict.levitation: true
+  ebifly.user:
+    default: false
+    children:
+      ebifly.fly.self: true
+      ebifly.fly.other: true
+      ebifly.restrict.respawn: true
+      ebifly.restrict.world: true
+      #ebifly.restrict.gamemode: true
+  ebifly.*:
+    default: false
+    children:
+      ebifly.fly.self: true
+      ebifly.fly.other: true
+      ebifly.restrict.respawn: true
+      ebifly.restrict.world: true
+      ebifly.restrict.gamemode: true
+      ebifly.restrict.water: true
+      ebifly.restrict.levitation: true
+      ebifly.free: true
+      ebifly.version: true
+      ebifly.reload: true

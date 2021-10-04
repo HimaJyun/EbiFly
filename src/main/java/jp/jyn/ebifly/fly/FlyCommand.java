@@ -151,7 +151,7 @@ public class FlyCommand implements TabExecutor {
     }
 
     private void persistFly(Player player) {
-        if (unavailable(player, player, "ebifly.fly")) {
+        if (unavailable(player, player, "ebifly.fly.self")) {
             return;
         }
 
@@ -184,7 +184,7 @@ public class FlyCommand implements TabExecutor {
 
     private void addCredit(CommandSender sender, Player recipient, int minute) {
         boolean self = sender.equals(recipient);
-        if (unavailable(sender, recipient, self ? "ebifly.fly" : "ebifly.other")) {
+        if (unavailable(sender, recipient, self ? "ebifly.fly.self" : "ebifly.fly.other")) {
             return;
         }
 

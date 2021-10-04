@@ -5,12 +5,12 @@ permissionError: "&cYou don't have permission!"
 fly:
   enable: "Flight is &aenabled&r!"
   disable: "Flight is &cdisable&r!"
-  timeout: "&cFlight will end in &r{time} seconds&c!"
+  timeout: "Flight will end in &c{time} seconds&r!"
   add: "Add {time} minute flight time"
   send: "Sent {time} minute flight time to {player}!"
   receive: "Received {time} minute flight time from {player}!"
-  creative: "Can't use in creative mode!"
-  unavailable: "This currently can not be used!"
+  creative: "&cCan't use in creative mode!"
+  unavailable: "&cThis currently can not be used!"
 
 payment:
   persist: "You paid {price} for flight!"
@@ -19,7 +19,7 @@ payment:
   receive: "{player} paid for {time} minute flight to You!"
   refund: "Refunded {price} for unused flight!"
   refundOther: "{price} has been refunded because {player} flight has been disabled."
-  insufficient: "Insufficient funds! {price} is required to fly!"
+  insufficient: "&cInsufficient funds! &r{price}&c is required to fly!"
 
 help:
   fly: "&aEnable&r/&cDisable&r fly."
@@ -28,6 +28,33 @@ help:
   help: "Show this help."
   time: "time"
   player: "player"
+
+# //*<!-- syntax -->*/
+# &0->Black(#000000)
+# &1->Dark Blue(#0000AA)
+# &2->Dark Green(#00AA00)
+# &3->Dark Aqua(#00AAAA)
+# &4->Dark Red(#AA0000)
+# &5->Purple(#AA00AA)
+# &6->Gold(#FFAA00)
+# &7->Gray(#AAAAAA)
+# &8->Dark Gray(#555555)
+# &9->Blue(#5555FF)
+# &a->Green(#55FF55)
+# &b->Aqua(#55FFFF)
+# &c->Red(#FF5555)
+# &d->Light Purple(#FF55FF)
+# &e->Yellow(#FFFF55)
+# &f->White(#FFFFFF)
+# &k->Obfuscated
+# &l->Bold
+# &m->Strikethrough
+# &n->Underline
+# &o->Italic
+# &r->Reset
+# #rrggbb (or #rgb)->Hex color
+# &->escape
+# {variable}->variable
 
 # Don't touch
 version: 2
