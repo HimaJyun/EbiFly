@@ -4,7 +4,8 @@ import jp.jyn.ebifly.config.MainConfig;
 import jp.jyn.ebifly.config.MessageConfig;
 import jp.jyn.ebifly.fly.FlyCommand;
 import jp.jyn.ebifly.fly.FlyRepository;
-import jp.jyn.ebifly.fly.RestrictListener;
+import jp.jyn.ebifly.listener.RestrictListener;
+import jp.jyn.ebifly.listener.SafetyListener;
 import jp.jyn.ebifly.fly.VaultEconomy;
 import jp.jyn.jbukkitlib.config.YamlLoader;
 import jp.jyn.jbukkitlib.config.locale.BukkitLocale;
@@ -25,6 +26,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
@@ -91,20 +93,54 @@ public class PluginMain extends JavaPlugin {
         var executor = Executors.newSingleThreadScheduledExecutor();
         executor.submit(() -> Thread.currentThread().setName("ebifly-timer"));
         destructor.addFirst(executor::shutdown);
+        Consumer<Runnable> syncCall = r -> getServer().getScheduler().runTask(this, r);
+
+        // 安全機能
+        SafetyListener safety;
+        if (config.safetyFall || config.safetyVoid || config.safetyLava > 0) {
+            safety = new SafetyListener(this, config, syncCall);
+            destructor.addFirst(() -> {
+                HandlerList.unregisterAll(safety);
+                safety.save(this);
+            });
+            if (config.safetySave > 0) {
+                // Bukkitのタイマーは精度悪い(tick基準なのでTPSでズレまくる)ので、ScheduledExecutorServiceで定期実行する
+                // タイマー処理に影響を与えないように実際の処理はBukkitのスレッドを使う
+                var f = executor.scheduleAtFixedRate(
+                    () -> Bukkit.getScheduler().runTaskAsynchronously(this, () -> safety.save(this)),
+                    config.safetySave, config.safetySave, TimeUnit.SECONDS
+                );
+                destructor.addFirst(() -> f.cancel(false));
+            }
+        } else {
+            safety = null;
+        }
+
+        // 経済
+        var economy = config.economy == null ? null : new VaultEconomy(config);
 
         // リポジトリ
-        var economy = config.economy == null ? null : new VaultEconomy(config);
-        Consumer<Runnable> syncCall = r -> getServer().getScheduler().runTask(this, r);
-        var repository = new FlyRepository(config, message, executor, economy, syncCall);
+        var repository = new FlyRepository(config, message, executor, economy,
+            syncCall, safety == null ? p -> {} : safety::add);
+        destructor.addFirst(() -> getServer().getOnlinePlayers().forEach(repository::stopRefund)); // 全ユーザー飛行停止
+        // ログアウト時の停止
+        var quit = repository.new FlyQuitListener(safety == null ? p -> {} : safety::stopCount);
+        getServer().getPluginManager().registerEvents(quit, this);
+        destructor.addFirst(() -> HandlerList.unregisterAll(quit));
+
+        // API登録(たぶん誰も使わない)
         instance.setInstance(repository);
         destructor.addFirst(() -> instance.setInstance(null));
-        // API登録(たぶん誰も使わない)
         getServer().getServicesManager().register(EbiFly.class, instance, this, ServicePriority.Normal);
         destructor.addFirst(() -> getServer().getServicesManager().unregister(instance));
 
-        // TODO: イベント
-        var listener = new RestrictListener(this, config, repository, syncCall);
-        destructor.addFirst(() -> HandlerList.unregisterAll(listener));
+        // 制限機能
+        if (config.restrictRespawn || config.restrictWorld || config.restrictGamemode
+            || config.restrictLevitation != null || config.restrictWater != null) {
+            var listener = new RestrictListener(this, config, repository,
+                syncCall, safety == null || config.safetyLevitation ? p -> {} : safety::remove);
+            destructor.addFirst(() -> HandlerList.unregisterAll(listener));
+        }
 
         // コマンド
         var command = new FlyCommand(this, config, message, repository, economy, checker, this::reload);

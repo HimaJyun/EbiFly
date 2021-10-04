@@ -8,6 +8,10 @@ import jp.jyn.jbukkitlib.config.parser.component.ComponentVariable;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.util.Collections;
 import java.util.Deque;
@@ -31,6 +35,7 @@ public class FlyRepository implements EbiFly {
     private final ScheduledExecutorService executor;
     private final VaultEconomy economy;
     private final Consumer<Runnable> syncCall;
+    private final Consumer<Player> removeHandler;
 
     private final int notify;
     private final double price;
@@ -41,11 +46,12 @@ public class FlyRepository implements EbiFly {
 
     public FlyRepository(MainConfig config, BukkitLocale<MessageConfig> message,
                          ScheduledExecutorService executor, VaultEconomy economy,
-                         Consumer<Runnable> syncCall) {
+                         Consumer<Runnable> syncCall, Consumer<Player> removeHandler) {
         this.message = message;
         this.executor = executor;
         this.economy = economy;
         this.syncCall = syncCall;
+        this.removeHandler = removeHandler;
 
         this.notify = config.noticeTimeoutSecond;
         if (economy == null) {
@@ -96,6 +102,7 @@ public class FlyRepository implements EbiFly {
             });
         }
 
+        removeHandler.accept(player);
         return r;
     }
 
@@ -297,15 +304,17 @@ public class FlyRepository implements EbiFly {
         return v == null ? Collections.emptyMap() : v.clearCredits();
     }
 
-    public void stopRefund(Player player) {
-        var status = remove(player, true);
-        if (status == null || economy == null || refundType == null) {
-            return;
+    public boolean stopRefund(Player player, boolean notice) {
+        var status = remove(player, notice);
+        if (status == null) {
+            return false;
+        } else if (economy == null || refundType == null) {
+            return true;
         }
 
         var refund = status.clearCredits();
         if (refund.isEmpty()) {
-            return;
+            return true;
         }
 
         if (refundType) {
@@ -321,9 +330,18 @@ public class FlyRepository implements EbiFly {
                 v.put("price", () -> economy.format(entry.getValue()));
 
                 var l = message.get(p).payment;
-                (p.equals(player) ? l.refund : l.refundOther).accept(p, v);
+                if (!p.equals(player)) {
+                    l.refundOther.accept(p, v);
+                } else if (notice) {
+                    l.refund.accept(p, v);
+                }
             }
         }
+        return true;
+    }
+
+    public void stopRefund(Player player) {
+        stopRefund(player, true);
     }
 
     private static final class FlightStatus {
@@ -471,6 +489,22 @@ public class FlyRepository implements EbiFly {
 
         private Credit(double price, int minute, OfflinePlayer payer) {
             this(price, new AtomicInteger(minute), payer);
+        }
+    }
+
+    public /*static*/ final class FlyQuitListener implements Listener {
+        private final Consumer<Player> quitHandler;
+
+        public FlyQuitListener(Consumer<Player> quitHandler) {
+            this.quitHandler = quitHandler;
+        }
+
+        @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+        public void onPlayerQuit(PlayerQuitEvent e) {
+            if (!FlyRepository.this.stopRefund(e.getPlayer(), false)) {
+                // falseの時 -> 既に削除された後疑惑があるのでquitHandlerを発動させる
+                quitHandler.accept(e.getPlayer());
+            }
         }
     }
 }

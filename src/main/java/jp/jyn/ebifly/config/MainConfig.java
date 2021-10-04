@@ -2,6 +2,7 @@ package jp.jyn.ebifly.config;
 
 import jp.jyn.ebifly.PluginMain;
 import jp.jyn.jbukkitlib.config.YamlLoader;
+import jp.jyn.jbukkitlib.config.parser.TimeParser;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.configuration.ConfigurationSection;
@@ -11,6 +12,7 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Logger;
@@ -19,7 +21,12 @@ public class MainConfig {
     public final boolean versionCheck;
 
     public final boolean safetyFall;
+    public final boolean safetyVoid;
     public final int safetyLava;
+    public final boolean safetyLevitation;
+    public final long safetyLimit;
+    public final long safetyCleanup;
+    public final long safetySave;
 
     public final boolean localeEnable;
     public final String localeDefault;
@@ -47,7 +54,12 @@ public class MainConfig {
         versionCheck = config.getBoolean("versionCheck");
 
         safetyFall = config.getBoolean("safety.fall");
+        safetyVoid = config.getBoolean("safety.void");
         safetyLava = config.getInt("safety.lava");
+        safetyLevitation = config.getBoolean("safety.levitation");
+        safetyLimit = TimeParser.parse(config.getString("safety.limit", "0"), TimeUnit.NANOSECONDS);
+        safetyCleanup = TimeParser.parse(config.getString("safety.cleanup", "0"), TimeUnit.NANOSECONDS);
+        safetySave = TimeParser.parse(config.getString("safety.save", "0"), TimeUnit.SECONDS);
 
         localeEnable = config.getBoolean("locale.enable");
         localeDefault = Objects.requireNonNull(config.getString("locale.default"), "locale.default is null");

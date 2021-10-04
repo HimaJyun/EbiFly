@@ -1,7 +1,8 @@
-package jp.jyn.ebifly.fly;
+package jp.jyn.ebifly.listener;
 
 import jp.jyn.ebifly.PluginMain;
 import jp.jyn.ebifly.config.MainConfig;
+import jp.jyn.ebifly.fly.FlyRepository;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.entity.EntityType;
@@ -24,10 +25,13 @@ public class RestrictListener implements Listener {
     private final boolean levitationStop;
     private final boolean waterStop;
     private final Consumer<Runnable> syncCall;
+    private final Consumer<Player> levitationHandler;
 
-    public RestrictListener(PluginMain plugin, MainConfig config, FlyRepository fly, Consumer<Runnable> syncCall) {
+    public RestrictListener(PluginMain plugin, MainConfig config, FlyRepository fly,
+                            Consumer<Runnable> syncCall, Consumer<Player> levitationHandler) {
         this.fly = fly;
         this.syncCall = syncCall;
+        this.levitationHandler = levitationHandler;
 
         Bukkit.getServer().getPluginManager().registerEvents(this, plugin);
         // 必要ない物をアンロード
@@ -115,6 +119,7 @@ public class RestrictListener implements Listener {
         if (levitationStop) {
             if (e.getAction() == EntityPotionEffectEvent.Action.ADDED) {
                 fly.stopRefund(p);
+                levitationHandler.accept(p);
             }
         } else {
             switch (e.getAction()) {

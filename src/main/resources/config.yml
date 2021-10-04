@@ -2,9 +2,12 @@ versionCheck: true
 
 safety:
   fall: true
-  lava: 60
-  limit: 0 # Safety protect limit. (unit: [d]ay/[h]our/[m]inute/[s]econd, 0 for unlimited)
+  void: true
+  lava: 30 # unit: second (0 for disable)
+  levitation: false # if true, enable safety feature in levitation.
+  limit: 0s # Safety protect limit. (unit: [d]ay/[h]our/[m]inute/[s]econd, 0 for unlimited)
   cleanup: 1d12h # Deleted after a specified period of time after logout. (unit: d/h/m/s, 0 for disabled)
+  save: 12h # save interval. (unit: d/h/m/s, 0 for only stop)
 
 # If you need keep the game balance, restrict flight.
 # This setting enable/disable the permission check, restricts can also be set in detail with permissions.
@@ -18,10 +21,6 @@ restrict:
   # Due to Bukkit's limitations, this feature calls many events.
   # Disable this feature if you need to keep the best performance. (This load is usually not an issue.)
   water: false
-
-#disabling:
-#  levitation: false
-#  changeWorld: false
 
 # Vault required.
 economy:
