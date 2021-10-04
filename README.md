@@ -1,7 +1,7 @@
 # EbiFly
 
 Economy Billing Fly Plugin for Bukkit  
-[日本語解説](https://github.com/HimaJyun/EbiFly/blob/master/README_ja.md)
+[日本語解説](/README_ja.md)
 
 (Ebi(エビ/shrimp) + Fly(フライ/fry) = EbiFly(エビフライ/[Japanese fried shrimp](https://www.google.com/search?q=japanese%20fried%20shrimp&tbm=isch)))
 
